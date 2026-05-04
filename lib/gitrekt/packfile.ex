@@ -6,6 +6,7 @@ defmodule GitRekt.Packfile do
   import Bitwise
 
   alias GitRekt.Git
+  alias GitRekt.Config
 
   @type obj       :: {Git.obj_type, binary}
   @type obj_iter  :: {non_neg_integer, non_neg_integer, binary}
@@ -53,6 +54,7 @@ defmodule GitRekt.Packfile do
 
   defp unpack_obj(data) when byte_size(data) > 2 do
     {id_type, inflate_size, rest} = unpack_obj_head(data)
+    validate_object_size(inflate_size)
     obj_type = format_obj_type(id_type)
     cond do
       obj_type == :delta_reference && byte_size(rest) > 20 ->
@@ -170,6 +172,13 @@ defmodule GitRekt.Packfile do
       else: size
 
     {offset, size, rest}
+  end
+
+  defp validate_object_size(size) do
+    max_size = Config.max_object_size()
+    if size > max_size do
+      raise "PACK object size #{size} exceeds maximum allowed size #{max_size}"
+    end
   end
 
   defp format_obj_type(1), do: :commit
