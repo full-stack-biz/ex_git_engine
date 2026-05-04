@@ -230,7 +230,7 @@ defmodule GitRekt.WireProtocol do
   defp pkt_next("PACK" <> _rest = pack), do: {[{:pack, pack}], ""}
   defp pkt_next(<<hex::bytes-size(4), payload::binary>> = pkt) do
     case Integer.parse(hex, 16) do
-      {payload_size, ""} ->
+      {payload_size, ""} when payload_size > 4 ->
         data_size = payload_size - 4
         data_size_skip_lf = data_size - 1
         case payload do
@@ -241,6 +241,8 @@ defmodule GitRekt.WireProtocol do
           <<data::bytes-size(data_size)>> ->
             {[data], ""}
         end
+      {payload_size, ""} ->
+        raise "Invalid PKT-LINE size #{payload_size}: must be > 4 bytes"
       :error ->
         raise "Invalid PKT line #{inspect pkt}" # TODO
     end
