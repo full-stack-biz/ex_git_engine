@@ -99,6 +99,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
   def next(%__MODULE__{state: :done} = handle, []) do
     if handle.cmds != [] do
       with  :ok <- push_pack(handle.agent, handle.writepack, handle.writepack_progress),
+            :ok <- GitRepo.pre_push(handle.repo, handle.cmds),
             :ok <- push_cmds(handle.agent, handle.cmds),
            {:ok, repo} <- GitRepo.push(handle.repo, handle.cmds) do
         {%{handle|repo: repo}, [], report_status(handle)}
