@@ -84,6 +84,7 @@ defmodule GitRekt.Packfile do
     unpack_obj_size(rest, acc + (num <<< (4+7*i)), i+1)
   end
 
+  @spec unpack_obj_data(binary) :: {binary, binary}
   defp unpack_obj_data(data) do
     data_size = byte_size(data)
     case Git.object_zlib_inflate(data) do
