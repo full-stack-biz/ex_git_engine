@@ -59,8 +59,9 @@ defmodule GitRekt.WireProtocol.ReceivePack do
   end
 
   def next(%__MODULE__{state: :disco} = handle, lines) do
-    Logger.debug("RECEIVE_PACK disco->update_req: preserving caps #{inspect(handle.caps)}")
-    {%{handle|state: :update_req}, lines, reference_discovery(handle.agent, @service_name, handle.caps)}
+    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
+    Logger.debug("RECEIVE_PACK disco->update_req: advertised_caps=#{inspect(advertised)}")
+    {%{handle|state: :update_req, advertised_caps: advertised}, lines, reference_discovery(handle.agent, @service_name, handle.caps)}
   end
 
   def next(%__MODULE__{state: :update_req} = handle, [:flush|lines]) do

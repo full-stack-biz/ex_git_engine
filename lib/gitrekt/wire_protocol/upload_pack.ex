@@ -119,14 +119,20 @@ defmodule GitRekt.WireProtocol.UploadPack do
   end
 
   defp ack_haves([], _caps), do: []
-  defp ack_haves(haves, caps) do
+  defp ack_haves([last_have], caps) do
     cond do
-      "multi_ack" in caps ->
-        Enum.map(haves, &{:ack, &1, :continue})
-      "multi_ack_detailed" in caps ->
-        Enum.map(haves, &{:ack, &1, :common})
-      true ->
-        Enum.map(haves, &{:ack, &1})
+      "multi_ack" in caps -> [{:ack, last_have, :ready}]
+      "multi_ack_detailed" in caps -> [{:ack, last_have, :ready}]
+      true -> [{:ack, last_have}]
     end
+  end
+  defp ack_haves([have|rest], caps) do
+    ack_status =
+      cond do
+        "multi_ack" in caps -> {:ack, have, :continue}
+        "multi_ack_detailed" in caps -> {:ack, have, :common}
+        true -> {:ack, have}
+      end
+    [ack_status | ack_haves(rest, caps)]
   end
 end

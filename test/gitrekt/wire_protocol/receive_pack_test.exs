@@ -238,5 +238,16 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
       assert "unknown-cap" in unknown_caps
       assert unknown_caps != []
     end
+
+    test "advertised_caps includes ofs-delta and atomic capabilities" do
+      # Verify that new capabilities are advertised by the server
+      advertised = GitRekt.WireProtocol.server_capabilities("git-receive-pack")
+
+      assert "report-status" in advertised
+      assert "delete-refs" in advertised
+      assert "ofs-delta" in advertised
+      assert "atomic" in advertised
+      assert String.contains?(Enum.find(advertised, "", &String.starts_with?(&1, "agent=")), "gitrekt")
+    end
   end
 end

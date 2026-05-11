@@ -19,7 +19,7 @@ defmodule GitRekt.WireProtocol do
   alias GitRekt.GitRef
 
   @upload_caps ~w(multi_ack multi_ack_detailed)
-  @receive_caps ~w(report-status delete-refs)
+  @receive_caps ~w(report-status delete-refs ofs-delta atomic)
 
   @doc """
   Callback used to transist a service to the next step.
@@ -101,6 +101,8 @@ defmodule GitRekt.WireProtocol do
   @spec reference_discovery(GitAgent.agent, binary, [binary]) :: iolist
   def reference_discovery(agent, service, extra_capabilities \\ []) do
     {:ok, refs} = GitAgent.references(agent, target: :commit, stream_chunk_size: :infinity)
+    # Refs returned by libgit2's reference iterator are sorted in C locale order.
+    # HEAD is prepended separately to ensure it appears first as per the spec.
     [reference_head(agent)|Enum.to_list(refs)]
     |> List.flatten()
     |> Enum.map(&format_ref_line/1)
@@ -207,10 +209,12 @@ defmodule GitRekt.WireProtocol do
     telemetry_start(service, service.state, ref)
   end
 
-  defp server_agent_capability, do: "agent=gitrekt/#{Application.spec(:gitrekt, :vsn)}"
+  @doc false
+  def server_agent_capability, do: "agent=gitrekt/#{Application.spec(:gitrekt, :vsn)}"
 
-  defp server_capabilities("git-receive-pack"), do: [server_agent_capability()|@receive_caps]
-  defp server_capabilities("git-upload-pack"), do: [server_agent_capability()|@upload_caps]
+  @doc false
+  def server_capabilities("git-receive-pack"), do: [server_agent_capability()|@receive_caps]
+  def server_capabilities("git-upload-pack"), do: [server_agent_capability()|@upload_caps]
 
   @spec format_ref_line(GitRef.t) :: binary
   defp format_ref_line(%GitRef{oid: oid, prefix: prefix, name: name}), do: "#{Git.oid_fmt(oid)} #{prefix <> name}"
