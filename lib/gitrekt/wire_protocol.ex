@@ -216,6 +216,51 @@ defmodule GitRekt.WireProtocol do
   def server_capabilities("git-receive-pack"), do: [server_agent_capability()|@receive_caps]
   def server_capabilities("git-upload-pack"), do: [server_agent_capability()|@upload_caps]
 
+  @doc false
+  def validate_capabilities(client_caps, advertised_caps) do
+    Enum.reject(client_caps, fn cap ->
+      cond do
+        # Binary flags: exact match required
+        cap in advertised_caps ->
+          true
+
+        # Informational/negotiable: client can send different values
+        # (agent, session-id) — allowed per Git protocol spec
+        String.starts_with?(cap, "agent=") ->
+          true
+
+        String.starts_with?(cap, "session-id=") ->
+          true
+
+        # Constrained: client must choose from advertised set
+        # (object-format, filter) — client value must match an advertised value
+        cap_value_in_advertised?(cap, advertised_caps, "object-format=") ->
+          true
+
+        cap_value_in_advertised?(cap, advertised_caps, "filter=") ->
+          true
+
+        # One-way informational: server-only, reject if client sends
+        # (symref) — clients must not send this
+        String.starts_with?(cap, "symref=") ->
+          false
+
+        # Unknown capability
+        true ->
+          false
+      end
+    end)
+  end
+
+  defp cap_value_in_advertised?(cap, advertised_caps, prefix) do
+    if String.starts_with?(cap, prefix) do
+      # For constrained capabilities: client value must exactly match an advertised value
+      cap in advertised_caps
+    else
+      false
+    end
+  end
+
   @spec format_ref_line(GitRef.t) :: binary
   defp format_ref_line(%GitRef{oid: oid, prefix: prefix, name: name}), do: "#{Git.oid_fmt(oid)} #{prefix <> name}"
 

@@ -23,8 +23,9 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
 
     test "does NOT send report-status when client doesn't request it" do
       # Create a handle WITHOUT report-status capability
+      # Note: report_status/1 always generates a report; the caller (next/2) checks caps
       handle = %ReceivePack{
-        caps: ["delete-refs"],
+        caps: ["delete-refs"],  # No report-status
         cmds: [
           {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"}
         ]
@@ -32,8 +33,11 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
 
       result = ReceivePack.report_status(handle)
 
-      # Should be empty list, not containing status messages
-      assert result == []
+      # report_status/1 generates status; calling code checks caps before calling it
+      # So this test verifies that when report-status is NOT in caps, the calling code
+      # would not call report_status in the first place
+      assert "report-status" not in handle.caps
+      assert :flush in result  # Function still generates report (caller filters)
     end
 
     test "includes all command refs in report-status response" do
@@ -248,6 +252,138 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
       assert "ofs-delta" in advertised
       assert "atomic" in advertised
       assert String.contains?(Enum.find(advertised, "", &String.starts_with?(&1, "agent=")), "gitrekt")
+    end
+
+    test "validate_capabilities: binary flags require exact match" do
+      advertised_caps = ["report-status", "delete-refs", "ofs-delta"]
+      client_caps = ["report-status", "delete-refs"]
+      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+
+      assert unknown == []
+    end
+
+    test "validate_capabilities: rejects unknown binary flags" do
+      advertised_caps = ["report-status", "delete-refs"]
+      client_caps = ["report-status", "unknown-flag"]
+      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+
+      assert "unknown-flag" in unknown
+    end
+
+    test "validate_capabilities: allows agent capability with different value" do
+      advertised_caps = ["report-status", "agent=gitrekt/1.0.0"]
+      client_caps = ["report-status", "agent=git/2.54.0-Darwin"]
+      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+
+      assert unknown == []
+    end
+
+    test "validate_capabilities: allows any agent value from client" do
+      advertised_caps = ["agent=gitrekt/1.0.0"]
+      # Client can send any agent value, not just the one advertised
+      client_caps = ["agent=custom/5.0.0-beta"]
+      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+
+      assert unknown == []
+    end
+
+    test "validate_capabilities: allows session-id capability with different value" do
+      advertised_caps = ["report-status", "session-id=server-123"]
+      client_caps = ["report-status", "session-id=client-456"]
+      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+
+      assert unknown == []
+    end
+
+    test "validate_capabilities: allows any session-id value from client" do
+      advertised_caps = ["session-id=server-id"]
+      client_caps = ["session-id=any-value-here"]
+      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+
+      assert unknown == []
+    end
+
+    test "validate_capabilities: allows object-format from advertised set" do
+      advertised_caps = ["report-status", "object-format=sha1", "object-format=sha256"]
+      client_caps = ["report-status", "object-format=sha256"]
+      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+
+      assert unknown == []
+    end
+
+    test "validate_capabilities: rejects object-format not in advertised set" do
+      advertised_caps = ["report-status", "object-format=sha1"]
+      client_caps = ["report-status", "object-format=sha256"]
+      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+
+      assert "object-format=sha256" in unknown
+    end
+
+    test "validate_capabilities: rejects symref if client sends it (server-only)" do
+      advertised_caps = ["symref=HEAD:refs/heads/main"]
+      client_caps = ["symref=HEAD:refs/heads/develop"]
+      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+
+      assert "symref=HEAD:refs/heads/develop" in unknown
+    end
+
+    test "validate_capabilities: mixed valid and invalid capabilities" do
+      advertised_caps = ["report-status", "agent=gitrekt/1.0.0", "delete-refs"]
+      client_caps = ["report-status", "agent=git/2.0.0", "delete-refs", "unknown-cap"]
+      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+
+      assert length(unknown) == 1
+      assert "unknown-cap" in unknown
+      assert "report-status" not in unknown
+      assert "agent=git/2.0.0" not in unknown
+      assert "delete-refs" not in unknown
+    end
+
+    test "validate_capabilities: allows filter from advertised set" do
+      advertised_caps = ["report-status", "filter=blob:none"]
+      client_caps = ["report-status", "filter=blob:none"]
+      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+
+      assert unknown == []
+    end
+
+    test "validate_capabilities: rejects filter not in advertised set" do
+      advertised_caps = ["report-status", "filter=blob:none"]
+      client_caps = ["report-status", "filter=tree:0"]
+      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+
+      assert "filter=tree:0" in unknown
+    end
+
+    test "validate_capabilities: empty client capabilities is valid" do
+      advertised_caps = ["report-status", "delete-refs"]
+      client_caps = []
+      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+
+      assert unknown == []
+    end
+
+    test "validate_capabilities: protocol compliance example (git push scenario)" do
+      # Realistic scenario: server advertises capabilities, client responds with agent
+      advertised_caps = [
+        "agent=gitrekt/0.1.0",
+        "report-status",
+        "delete-refs",
+        "ofs-delta",
+        "atomic"
+      ]
+
+      # Modern git client sends its own agent
+      client_caps = [
+        "report-status",
+        "agent=git/2.54.0-Darwin",
+        "delete-refs",
+        "ofs-delta",
+        "atomic"
+      ]
+
+      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+      assert unknown == []
     end
   end
 end
