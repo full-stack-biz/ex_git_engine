@@ -118,7 +118,8 @@ defmodule GitRekt.WireProtocol.ReceivePack do
         {%{handle|repo: repo}, [], report_status(handle)}
       else
         {:error, reason} ->
-          {handle, [], ["unpack #{inspect reason}"]}
+          error_msg = if is_binary(reason), do: reason, else: inspect(reason)
+          {handle, [], ["unpack ng #{error_msg}", :flush]}
       end
     else
       {handle, [], []}
@@ -145,7 +146,8 @@ defmodule GitRekt.WireProtocol.ReceivePack do
   # Helpers
   #
 
-  defp parse_cmds(cmds) do
+  @doc false
+  def parse_cmds(cmds) do
     Enum.map(cmds, fn cmd ->
       case String.split(cmd, " ", parts: 3) do
         [@null_oid, new, name] ->
@@ -158,17 +160,19 @@ defmodule GitRekt.WireProtocol.ReceivePack do
     end)
   end
 
-  defp parse_caps([]), do: {[], []}
-  defp parse_caps([first_ref|refs]) do
+  @doc false
+  def parse_caps([]), do: {[], []}
+  def parse_caps([first_ref|refs]) do
     case String.split(first_ref, "\0", parts: 2) do
       [first_ref] -> {[], [first_ref|refs]}
       [first_ref, caps] -> {String.split(caps, " ", trim: true), [first_ref|refs]}
     end
   end
 
-  defp report_status(%__MODULE__{caps: caps, cmds: cmds}) do
+  @doc false
+  def report_status(%__MODULE__{caps: caps, cmds: cmds}) do
     require Logger
-    should_report = "report-status" in caps or cmds != []
+    should_report = "report-status" in caps
     Logger.debug("REPORT_STATUS: client_caps=#{inspect(caps)}, cmds_count=#{length(cmds)}, should_report=#{should_report}")
     result = if should_report,
       do: List.flatten(["unpack ok", Enum.map(cmds, &"ok #{elem(&1, :erlang.tuple_size(&1)-1)}"), :flush]),
