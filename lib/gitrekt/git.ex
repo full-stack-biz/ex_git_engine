@@ -320,7 +320,7 @@ defmodule GitRekt.Git do
   """
   @spec repository_open(Path.t) :: {:ok, repo} | {:error, term}
   def repository_open(_path) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -328,7 +328,7 @@ defmodule GitRekt.Git do
   """
   @spec repository_bare?(repo) :: boolean
   def repository_bare?(_repo) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -336,7 +336,7 @@ defmodule GitRekt.Git do
   """
   @spec repository_empty?(repo) :: boolean
   def repository_empty?(_repo) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -344,7 +344,7 @@ defmodule GitRekt.Git do
   """
   @spec repository_get_path(repo) :: Path.t
   def repository_get_path(_repo) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -352,7 +352,7 @@ defmodule GitRekt.Git do
   """
   @spec repository_get_workdir(repo) :: Path.t
   def repository_get_workdir(_repo) do
-      raise Code.LoadError, file: nif_path() <> ".so"
+      :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -360,7 +360,7 @@ defmodule GitRekt.Git do
   """
   @spec repository_get_odb(repo) :: {:ok, odb} | {:error, term}
   def repository_get_odb(_repo) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -368,7 +368,7 @@ defmodule GitRekt.Git do
   """
   @spec repository_get_index(repo) :: {:ok, index} | {:error, term}
   def repository_get_index(_repo) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -376,7 +376,7 @@ defmodule GitRekt.Git do
   """
   @spec repository_get_config(repo) :: {:ok, config} | {:error, term}
   def repository_get_config(_repo) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -384,7 +384,7 @@ defmodule GitRekt.Git do
   """
   @spec repository_init(Path.t, boolean, binary) :: {:ok, repo} | {:error, term}
   def repository_init(_path, _bare \\ false, _initial_head \\ "master") do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -392,7 +392,7 @@ defmodule GitRekt.Git do
   """
   @spec repository_discover(Path.t) :: {:ok, Path.t} | {:error, term}
   def repository_discover(_path) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -400,7 +400,7 @@ defmodule GitRekt.Git do
   """
   @spec reference_list(repo) :: {:ok, [binary]} | {:error, term}
   def reference_list(_repo) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -408,7 +408,7 @@ defmodule GitRekt.Git do
   """
   @spec reference_peel(repo, binary, obj_type | :undefined) :: {:ok, obj_type, oid, obj} | {:error, term}
   def reference_peel(_repo, _name, _type \\ :undefined) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -416,7 +416,7 @@ defmodule GitRekt.Git do
   """
   @spec reference_create(repo, binary, ref_type, binary | oid, boolean) :: :ok | {:error, term}
   def reference_create(_repo, _name, _type, _target, _force \\ false) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -424,7 +424,7 @@ defmodule GitRekt.Git do
   """
   @spec reference_delete(repo, binary) :: :ok | {:error, term}
   def reference_delete(_repo, _name) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -432,7 +432,7 @@ defmodule GitRekt.Git do
   """
   @spec reference_to_id(repo, binary) :: {:ok, oid} | {:error, term}
   def reference_to_id(_repo, _name) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -440,7 +440,7 @@ defmodule GitRekt.Git do
   """
   @spec reference_glob(repo, binary) :: {:ok, [binary]} | {:error, term}
   def reference_glob(_repo, _glob) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -448,7 +448,7 @@ defmodule GitRekt.Git do
   """
   @spec reference_lookup(repo, binary) :: {:ok, binary, ref_type, binary} | {:error, term}
   def reference_lookup(_repo, _name) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -456,7 +456,7 @@ defmodule GitRekt.Git do
   """
   @spec reference_iterator(repo, binary | :undefined) :: {:ok, ref_iter} | {:error, term}
   def reference_iterator(_repo, _glob \\ :undefined) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -464,7 +464,7 @@ defmodule GitRekt.Git do
   """
   @spec reference_next(ref_iter) :: {:ok, binary, binary, ref_type, binary} | {:error, term}
   def reference_next(_iter) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -483,7 +483,7 @@ defmodule GitRekt.Git do
   """
   @spec reference_resolve(repo, binary) :: {:ok, binary, binary, oid} | {:error, term}
   def reference_resolve(_repo, _name) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -491,7 +491,7 @@ defmodule GitRekt.Git do
   """
   @spec reference_dwim(repo, binary) :: {:ok, binary, ref_type, binary} | {:error, term}
   def reference_dwim(_repo, _short_name) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -499,7 +499,7 @@ defmodule GitRekt.Git do
   """
   @spec reference_log?(repo, binary) :: {:ok, boolean} | {:error, term}
   def reference_log?(_repo, _name) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -507,7 +507,7 @@ defmodule GitRekt.Git do
   """
   @spec reflog_count(repo, binary) :: {:ok, pos_integer} | {:error, term}
   def reflog_count(_repo, _name) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -515,7 +515,7 @@ defmodule GitRekt.Git do
   """
   @spec reflog_read(repo, binary) :: {:ok, [reflog_entry]} | {:error, term}
   def reflog_read(_repo, _name) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -523,7 +523,7 @@ defmodule GitRekt.Git do
   """
   @spec reflog_delete(repo, binary) :: :ok | {:error, term}
   def reflog_delete(_repo, _name) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -531,7 +531,7 @@ defmodule GitRekt.Git do
   """
   @spec graph_ahead_behind(repo, oid, oid) :: {:ok, non_neg_integer, non_neg_integer}
   def graph_ahead_behind(_repo, _local, _upstream) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -541,7 +541,7 @@ defmodule GitRekt.Git do
   """
   @spec odb_object_hash(obj_type, binary) :: {:ok, oid} | {:error, term}
   def odb_object_hash(_type, _data) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -549,7 +549,7 @@ defmodule GitRekt.Git do
   """
   @spec odb_object_exists?(odb, oid) :: boolean
   def odb_object_exists?(_odb, _oid) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -557,7 +557,7 @@ defmodule GitRekt.Git do
   """
   @spec odb_read(odb, oid) :: {:ok, obj_type, binary}
   def odb_read(_odb, _oid) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -565,7 +565,7 @@ defmodule GitRekt.Git do
   """
   @spec odb_write(odb, binary, odb_type) :: {:ok, oid} | {:error, term}
   def odb_write(_odb, _data, _type) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -573,7 +573,7 @@ defmodule GitRekt.Git do
   """
   @spec odb_write_pack(odb, binary) :: :ok | {:error, term}
   def odb_write_pack(_odb, _data) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -581,7 +581,7 @@ defmodule GitRekt.Git do
   """
   @spec odb_get_writepack(odb) :: {:ok, odb_writepack} | {:error, term}
   def odb_get_writepack(_odb) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -589,7 +589,7 @@ defmodule GitRekt.Git do
   """
   @spec odb_writepack_append(odb_writepack, binary, indexer_progress) :: :ok | {:error, term}
   def odb_writepack_append(_odb_writepack, _data, _progress) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -597,7 +597,7 @@ defmodule GitRekt.Git do
   """
   @spec odb_writepack_commit(odb_writepack, indexer_progress) :: :ok | {:error, term}
   def odb_writepack_commit(_odb_writepack, _progress) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -605,7 +605,7 @@ defmodule GitRekt.Git do
   """
   @spec oid_fmt(oid) :: binary
   def oid_fmt(_oid) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -619,7 +619,7 @@ defmodule GitRekt.Git do
   """
   @spec oid_parse(binary) :: oid
   def oid_parse(_hash) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -627,7 +627,7 @@ defmodule GitRekt.Git do
   """
   @spec object_repository(obj) :: {:ok, repo} | {:error, term}
   def object_repository(_obj) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -635,7 +635,7 @@ defmodule GitRekt.Git do
   """
   @spec object_lookup(repo, oid) :: {:ok, obj_type, obj} | {:error, term}
   def object_lookup(_repo, _oid) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -643,7 +643,7 @@ defmodule GitRekt.Git do
   """
   @spec object_id(obj) :: {:ok, oid} | {:error, term}
   def object_id(_obj) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -651,7 +651,7 @@ defmodule GitRekt.Git do
   """
   @spec object_zlib_inflate(binary, pos_integer) :: {:ok, iodata, non_neg_integer} | {:error, term}
   def object_zlib_inflate(_data, _buffer_size \\ 16_384) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -662,6 +662,8 @@ defmodule GitRekt.Git do
     case commit_parent_count(commit) do
       {:ok, count} ->
         {:ok, GitStream.new(commit, {commit, 0, count}, &commit_parent_stream_next/1)}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -670,15 +672,15 @@ defmodule GitRekt.Git do
   """
   @spec commit_parent(commit, non_neg_integer) :: {:ok, oid, commit} | {:error, term}
   def commit_parent(_commit, _index) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
   Returns the number of parents for the given `commit`.
   """
-  @spec commit_parent_count(commit) :: oid
+  @spec commit_parent_count(commit) :: {:ok, non_neg_integer} | {:error, term}
   def commit_parent_count(_commit) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -686,7 +688,7 @@ defmodule GitRekt.Git do
   """
   @spec commit_tree_id(commit) :: oid
   def commit_tree_id(_commit) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -694,7 +696,7 @@ defmodule GitRekt.Git do
   """
   @spec commit_tree(commit) :: {:ok, oid, tree} | {:error, term}
   def commit_tree(_commit) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -702,7 +704,7 @@ defmodule GitRekt.Git do
   """
   @spec commit_create(repo, binary | :undefined, signature, signature, binary | :undefined, binary, oid, [binary]) :: {:ok, oid} | {:error, term}
   def commit_create(_repo, _ref, _author, _commiter, _encoding, _message, _tree, _parents) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -710,7 +712,7 @@ defmodule GitRekt.Git do
   """
   @spec commit_message(commit) :: {:ok, binary} | {:error, term}
   def commit_message(_commit) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -718,7 +720,7 @@ defmodule GitRekt.Git do
   """
   @spec commit_author(commit) :: {:ok, binary, binary, non_neg_integer, non_neg_integer} | {:error, term}
   def commit_author(_commit) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -726,7 +728,7 @@ defmodule GitRekt.Git do
   """
   @spec commit_committer(commit) :: {:ok, binary, binary, non_neg_integer, non_neg_integer} | {:error, term}
   def commit_committer(_commit) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -734,7 +736,7 @@ defmodule GitRekt.Git do
   """
   @spec commit_time(commit) :: {:ok, non_neg_integer, non_neg_integer} | {:error, term}
   def commit_time(_commit) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -742,7 +744,7 @@ defmodule GitRekt.Git do
   """
   @spec commit_raw_header(commit) :: {:ok, binary} | {:error, term}
   def commit_raw_header(_commit) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -750,7 +752,7 @@ defmodule GitRekt.Git do
   """
   @spec commit_header(commit, binary) :: {:ok, binary} | {:error, term}
   def commit_header(_commit, _field) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -758,7 +760,7 @@ defmodule GitRekt.Git do
   """
   @spec tree_byid(tree, oid) :: {:ok, integer, atom, binary, binary} | {:error, term}
   def tree_byid(_tree, _oid) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -766,7 +768,7 @@ defmodule GitRekt.Git do
   """
   @spec tree_bypath(tree, Path.t) :: {:ok, integer, atom, binary, binary} | {:error, term}
   def tree_bypath(_tree, _path) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -774,7 +776,7 @@ defmodule GitRekt.Git do
   """
   @spec tree_count(tree) :: {:ok, non_neg_integer} | {:error, term}
   def tree_count(_tree) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -782,7 +784,7 @@ defmodule GitRekt.Git do
   """
   @spec tree_nth(tree, non_neg_integer) :: {:ok, integer, atom, binary, binary} | {:error, term}
   def tree_nth(_tree, _nth) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -790,7 +792,12 @@ defmodule GitRekt.Git do
   """
   @spec tree_entries(tree) :: {:ok, Enumerable.t} | {:error, term}
   def tree_entries(tree) do
-    {:ok, GitStream.new(tree, {tree, 0}, &tree_stream_next/1)}
+    case tree_count(tree) do
+      {:ok, _count} ->
+        {:ok, GitStream.new(tree, {tree, 0}, &tree_stream_next/1)}
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   @doc """
@@ -798,7 +805,7 @@ defmodule GitRekt.Git do
   """
   @spec blob_size(blob) :: {:ok, integer} | {:error, term}
   def blob_size(_blob) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -806,7 +813,7 @@ defmodule GitRekt.Git do
   """
   @spec blob_content(blob) :: {:ok, binary} | {:error, term}
   def blob_content(_blob) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -814,7 +821,7 @@ defmodule GitRekt.Git do
   """
   @spec tag_list(repo) :: {:ok, [binary]} | {:error, term}
   def tag_list(_repo) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -822,7 +829,7 @@ defmodule GitRekt.Git do
   """
   @spec tag_peel(tag) :: {:ok, obj_type, oid, obj} | {:error, term}
   def tag_peel(_tag) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -830,7 +837,7 @@ defmodule GitRekt.Git do
   """
   @spec tag_name(tag) :: {:ok, binary} | {:error, term}
   def tag_name(_tag) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -838,7 +845,7 @@ defmodule GitRekt.Git do
   """
   @spec tag_message(tag) :: {:ok, binary} | {:error, term}
   def tag_message(_tag) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -846,7 +853,7 @@ defmodule GitRekt.Git do
   """
   @spec tag_author(tag) :: {:ok, binary, binary, non_neg_integer, non_neg_integer} | {:error, term}
   def tag_author(_tag) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -854,7 +861,7 @@ defmodule GitRekt.Git do
   """
   @spec library_version() :: {integer, integer, integer}
   def library_version() do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -862,7 +869,7 @@ defmodule GitRekt.Git do
   """
   @spec revwalk_new(repo) :: {:ok, reference} | {:error, term}
   def revwalk_new(_repo) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -870,7 +877,7 @@ defmodule GitRekt.Git do
   """
   @spec revwalk_push(revwalk, oid, boolean) :: :ok | {:error, term}
   def revwalk_push(_walk, _oid, _hide \\ false) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -878,7 +885,7 @@ defmodule GitRekt.Git do
   """
   @spec revwalk_next(revwalk) :: {:ok, oid} | {:error, term}
   def revwalk_next(_walk) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -886,7 +893,7 @@ defmodule GitRekt.Git do
   """
   @spec revwalk_sorting(revwalk, [revwalk_sort]) :: :ok | {:error, term}
   def revwalk_sorting(_walk, _sort_mode) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -894,7 +901,7 @@ defmodule GitRekt.Git do
   """
   @spec revwalk_simplify_first_parent(revwalk) :: :ok | {:error, term}
   def revwalk_simplify_first_parent(_walk) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -902,7 +909,7 @@ defmodule GitRekt.Git do
   """
   @spec revwalk_reset(revwalk) :: revwalk
   def revwalk_reset(_walk) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -918,7 +925,7 @@ defmodule GitRekt.Git do
   """
   @spec revwalk_repository(revwalk) :: {:ok, repo} | {:error, term}
   def revwalk_repository(_walk) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -926,7 +933,7 @@ defmodule GitRekt.Git do
   """
   @spec pathspec_match_tree(tree, [binary]) :: {:ok, boolean} | {:error, term}
   def pathspec_match_tree(_tree, _pathspec) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -934,7 +941,7 @@ defmodule GitRekt.Git do
   """
   @spec revwalk_pack(revwalk) :: {:ok, binary} | {:error, term}
   def revwalk_pack(_walk) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -942,7 +949,7 @@ defmodule GitRekt.Git do
   """
   @spec diff_tree(repo, tree, tree) :: {:ok, diff} | {:error, term}
   def diff_tree(_repo, _old_tree, _new_tree, _opts \\ []) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -950,7 +957,7 @@ defmodule GitRekt.Git do
   """
   @spec diff_stats(diff) :: {:ok, non_neg_integer, non_neg_integer, non_neg_integer} | {:error, term}
   def diff_stats(_diff) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -958,7 +965,7 @@ defmodule GitRekt.Git do
   """
   @spec diff_delta_count(diff) :: {:ok, non_neg_integer} | {:error, term}
   def diff_delta_count(_diff) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -966,7 +973,7 @@ defmodule GitRekt.Git do
   """
   @spec diff_deltas(diff) :: {:ok, [{diff_delta, [{diff_hunk, [diff_line]}]}]} | {:error, term}
   def diff_deltas(_diff) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -974,7 +981,7 @@ defmodule GitRekt.Git do
   """
   @spec diff_format(diff, diff_format) :: {:ok, binary} | {:error, term}
   def diff_format(_diff, _format \\ :patch) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -982,7 +989,7 @@ defmodule GitRekt.Git do
   """
   @spec index_new() :: {:ok, index} | {:error, term}
   def index_new do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -990,7 +997,7 @@ defmodule GitRekt.Git do
   """
   @spec index_write(index) :: :ok | {:error, term}
   def index_write(_index) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -998,7 +1005,7 @@ defmodule GitRekt.Git do
   """
   @spec index_write_tree(index) :: {:ok, oid} | {:error, term}
   def index_write_tree(_index) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1006,7 +1013,7 @@ defmodule GitRekt.Git do
   """
   @spec index_write_tree(index, repo) :: {:ok, oid} | {:error, term}
   def index_write_tree(_index, _repo) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1014,7 +1021,7 @@ defmodule GitRekt.Git do
   """
   @spec index_read_tree(index, tree) :: :ok | {:error, term}
   def index_read_tree(_index, _tree) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1022,7 +1029,7 @@ defmodule GitRekt.Git do
   """
   @spec index_count(index) :: non_neg_integer()
   def index_count(_index) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1044,7 +1051,7 @@ defmodule GitRekt.Git do
   {:error, term}
 
   def index_nth(_index, _nth) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1065,7 +1072,7 @@ defmodule GitRekt.Git do
         binary} |
   {:error, term}
   def index_bypath(_index, _path, _stage) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1073,7 +1080,7 @@ defmodule GitRekt.Git do
   """
   @spec index_add(index, index_entry) :: :ok | {:error, term}
   def index_add(_index, _entry) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1081,7 +1088,7 @@ defmodule GitRekt.Git do
   """
   @spec index_remove(index, Path.t, non_neg_integer) :: :ok | {:error, term}
   def index_remove(_index, _path, _stage \\ 0) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1089,7 +1096,7 @@ defmodule GitRekt.Git do
   """
   @spec index_remove_dir(index, Path.t, non_neg_integer) :: :ok | {:error, term}
   def index_remove_dir(_index, _path, _stage \\ 0) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1097,7 +1104,7 @@ defmodule GitRekt.Git do
   """
   @spec index_clear(index) :: :ok | {:error, term}
   def index_clear(_index) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1105,7 +1112,7 @@ defmodule GitRekt.Git do
   """
   @spec signature_default(repo) :: {:ok, binary, binary, non_neg_integer, non_neg_integer} | {:error, term}
   def signature_default(_repo) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1113,7 +1120,7 @@ defmodule GitRekt.Git do
   """
   @spec signature_new(binary, binary) :: {:ok, binary, binary}
   def signature_new(_name, _email) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1121,7 +1128,7 @@ defmodule GitRekt.Git do
   """
   @spec signature_new(binary, binary, non_neg_integer) :: {:ok, binary, binary, non_neg_integer, non_neg_integer} | {:error, term}
   def signature_new(_name, _email, _time) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1129,7 +1136,7 @@ defmodule GitRekt.Git do
   """
   @spec revparse_single(repo, binary) :: {:ok, obj, obj_type, oid} | {:error, term}
   def revparse_single(_repo, _revision) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1137,7 +1144,7 @@ defmodule GitRekt.Git do
   """
   @spec revparse_ext(repo, binary) :: {:ok, obj, obj_type, oid, binary | nil} | {:error, term}
   def revparse_ext(_repo, _revision) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1145,7 +1152,7 @@ defmodule GitRekt.Git do
   """
   @spec config_set_bool(config, binary, boolean) :: :ok | {:error, term}
   def config_set_bool(_config, _name, _val) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1153,7 +1160,7 @@ defmodule GitRekt.Git do
   """
   @spec config_get_bool(config, binary) :: {:ok, boolean} | {:error, term}
   def config_get_bool(_config, _name) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1161,7 +1168,7 @@ defmodule GitRekt.Git do
   """
   @spec config_set_string(config, binary, binary) :: :ok | {:error, term}
   def config_set_string(_config, _name, _val) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1169,7 +1176,7 @@ defmodule GitRekt.Git do
   """
   @spec config_get_string(config, binary) :: {:ok, binary} | {:error, term}
   def config_get_string(_config, _name) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1177,7 +1184,7 @@ defmodule GitRekt.Git do
   """
   @spec config_open(binary) :: {:ok, config} | {:error, term}
   def config_open(_path) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1185,7 +1192,7 @@ defmodule GitRekt.Git do
   """
   @spec pack_new(repo) :: {:ok, pack} | {:error, term}
   def pack_new(_repo) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1193,7 +1200,7 @@ defmodule GitRekt.Git do
   """
   @spec pack_insert_commit(pack, oid) :: :ok | {:error, term}
   def pack_insert_commit(_pack, _oid) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
 
@@ -1202,7 +1209,7 @@ defmodule GitRekt.Git do
   """
   @spec pack_insert_walk(pack, revwalk) :: :ok | {:error, term}
   def pack_insert_walk(_pack, _walk) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1210,7 +1217,7 @@ defmodule GitRekt.Git do
   """
   @spec pack_data(pack) :: {:ok, binary} | {:error, term}
   def pack_data(_pack) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1218,7 +1225,7 @@ defmodule GitRekt.Git do
   """
   @spec worktree_add(repo, binary, binary, binary | :undefined) :: {:ok, worktree} | {:error, term}
   def worktree_add(_repo, _name, _path, _ref) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -1226,13 +1233,14 @@ defmodule GitRekt.Git do
   """
   @spec worktree_prune(worktree) :: :ok | {:error, term}
   def worktree_prune(_worktree) do
-    raise Code.LoadError, file: nif_path() <> ".so"
+    :erlang.nif_error(:not_loaded)
   end
 
   #
   # Helpers
   #
 
+  @spec reference_stream_next(ref_iter) :: {[{binary, ref_type, binary, binary}], ref_iter} | {:halt, ref_iter}
   defp reference_stream_next(iter) do
     case reference_next(iter) do
       {:ok, name, type, shortname, target} ->
@@ -1242,6 +1250,7 @@ defmodule GitRekt.Git do
     end
   end
 
+  @spec revwalk_stream_next(revwalk) :: {[oid], revwalk} | {:halt, revwalk}
   defp revwalk_stream_next(walk) do
     case revwalk_next(walk) do
       {:ok, oid} ->
@@ -1251,6 +1260,7 @@ defmodule GitRekt.Git do
     end
   end
 
+  @spec commit_parent_stream_next({commit, non_neg_integer, non_neg_integer}) :: {:halt, {commit, non_neg_integer, non_neg_integer}} | {[{oid, commit}], {commit, non_neg_integer, non_neg_integer}}
   defp commit_parent_stream_next({_commit, max, max} = iter), do: {:halt, iter}
   defp commit_parent_stream_next({commit, i, max}) do
     case commit_parent(commit, i) do
@@ -1258,6 +1268,7 @@ defmodule GitRekt.Git do
     end
   end
 
+  @spec tree_stream_next({tree, non_neg_integer}) :: {[{integer, atom, oid, binary}], {tree, non_neg_integer}} | {:halt, {tree, non_neg_integer}}
   defp tree_stream_next(iter) do
     {tree, i} = iter
     case tree_nth(tree, i) do

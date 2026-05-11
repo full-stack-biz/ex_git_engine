@@ -111,7 +111,7 @@ defmodule GitRekt.WireProtocol do
   @doc """
   Returns the given `data` formatted as *PKT-LINE*
   """
-  @spec pkt_line(binary|:flush) :: binary
+  @spec pkt_line(:flush | {:ack, Git.oid} | {:ack, Git.oid, binary} | :nak | binary) :: binary
   def pkt_line(data \\ :flush)
   def pkt_line(:flush), do: "0000"
   def pkt_line({:ack, oid}), do: pkt_line("ACK #{Git.oid_fmt(oid)}")
@@ -212,6 +212,7 @@ defmodule GitRekt.WireProtocol do
   defp server_capabilities("git-receive-pack"), do: [server_agent_capability()|@receive_caps]
   defp server_capabilities("git-upload-pack"), do: [server_agent_capability()|@upload_caps]
 
+  @spec format_ref_line(GitRef.t) :: binary
   defp format_ref_line(%GitRef{oid: oid, prefix: prefix, name: name}), do: "#{Git.oid_fmt(oid)} #{prefix <> name}"
 
   defp reference_head(agent) do

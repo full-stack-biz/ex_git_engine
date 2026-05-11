@@ -1207,6 +1207,7 @@ defmodule GitRekt.GitAgent do
     end
   end
 
+  @spec fetch_reference_target(term, term, term) :: {:ok, term} | {:error, term}
   defp fetch_reference_target({_name, _shorthand, _type, _target} = ref, target, handle) do
     fetch_reference_target(resolve_reference(ref), target, handle)
   end
@@ -1219,8 +1220,8 @@ defmodule GitRekt.GitAgent do
         {:ok, tag}
       {:ok, %GitCommit{oid: oid}} ->
         {:ok, struct(ref, oid: oid)}
-      {:error, _reason} ->
-        {:ok, ref}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
