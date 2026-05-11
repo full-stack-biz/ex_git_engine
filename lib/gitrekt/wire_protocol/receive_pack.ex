@@ -116,11 +116,13 @@ defmodule GitRekt.WireProtocol.ReceivePack do
             :ok <- GitRepo.pre_push(handle.repo, handle.cmds),
             :ok <- push_cmds(handle.agent, handle.cmds),
            {:ok, repo} <- GitRepo.push(handle.repo, handle.cmds) do
-        {%{handle|repo: repo}, [], report_status(handle)}
+        output = if "report-status" in handle.caps, do: report_status(handle), else: []
+        {%{handle|repo: repo}, [], output}
       else
         {:error, reason} ->
           error_msg = if is_binary(reason), do: reason, else: inspect(reason)
-          {handle, [], ["unpack ng #{error_msg}", :flush]}
+          output = if "report-status" in handle.caps, do: ["unpack ng #{error_msg}", :flush], else: []
+          {handle, [], output}
       end
     else
       {handle, [], []}
@@ -171,14 +173,16 @@ defmodule GitRekt.WireProtocol.ReceivePack do
   end
 
   @doc false
-  def report_status(%__MODULE__{caps: caps, cmds: cmds}) do
+  def report_status(%__MODULE__{caps: _caps, cmds: cmds}) do
     require Logger
-    should_report = "report-status" in caps
-    Logger.debug("REPORT_STATUS: client_caps=#{inspect(caps)}, cmds_count=#{length(cmds)}, should_report=#{should_report}")
-    result = if should_report,
-      do: List.flatten(["unpack ok", Enum.map(cmds, &"ok #{elem(&1, :erlang.tuple_size(&1)-1)}"), :flush]),
-    else: []
-    Logger.debug("REPORT_STATUS returning: #{inspect(result)}")
+    cmd_statuses = Enum.map(cmds, &"ok #{elem(&1, :erlang.tuple_size(&1)-1)}")
+    result = ["unpack ok"] ++ cmd_statuses ++ [:flush]
+    Logger.debug("REPORT_STATUS raw lines: #{inspect(result)}")
+    encoded = GitRekt.WireProtocol.encode(result)
+    Logger.debug("REPORT_STATUS encoded: #{inspect(encoded)}")
+    encoded_binary = IO.iodata_to_binary(encoded)
+    Logger.debug("REPORT_STATUS binary hex: #{Base.encode16(encoded_binary)}")
+    Logger.debug("REPORT_STATUS result returning: #{inspect(result)}")
     result
   end
 

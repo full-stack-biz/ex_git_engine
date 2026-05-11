@@ -128,6 +128,7 @@ Gaps: [anything missing or unclear]
 - `references/git_protocol_wire.md` — Core wire protocol (universal): pkt-line format, capability negotiation, push/fetch phases, report-status, command structures
 - `references/git_protocol_http.md` — HTTP smart protocol: GET /info/refs, POST /git-receive-pack, headers, authentication, redirects, Content-Type negotiation
 - `references/git_protocol_ssh.md` — SSH transport: command execution, channel setup, authentication, environment, wire protocol delivery over stdin/stdout
+- `references/git_client_behavior.md` — Git client parsing (transport-agnostic): how send-pack parses report-status, success/failure determination, stdin/stdout flow (sourced from git v2.54.0 source code)
 - `references/libgit2_api.md` — libgit2 C library: API reference, repository/object/ref operations, memory management, NIF wrapper implications, common patterns
 
 ## Reference Document Structure
