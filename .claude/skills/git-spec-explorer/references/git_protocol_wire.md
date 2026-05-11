@@ -264,6 +264,137 @@ end
 
 Only after validation passes should the server process client requests.
 
+### Parameterized Capabilities
+
+Some capabilities have parameters (using `=` syntax) where negotiation rules vary by capability type.
+
+#### Capability Classes
+
+**1. Informational/Negotiable — Client Has Freedom**
+
+- **`agent=X`** (both receive-pack and upload-pack)
+  - Server advertises: `agent=gitrekt/1.0.0`
+  - Client may respond: `agent=git/2.54.0-Darwin` (DIFFERENT value allowed)
+  - Spec: "The client may optionally return its own agent string by responding with an `agent=Y` capability (but it MUST NOT do so if the server did not mention the agent capability)."
+  - Purpose: Purely informational for statistics/debugging; MUST NOT programmatically assume features
+  - Validation: Allow ANY `agent=*` value from client if server advertised `agent=*`
+
+- **`session-id=<id>`** (both services)
+  - Server advertises: `session-id=abc123def456`
+  - Client may respond: `session-id=xyz789qrs012` (own independent session ID)
+  - Spec: "The client may advertise its own session ID back to the server as well."
+  - Purpose: Parallel tracking of request flow across connections
+  - Validation: Accept any `session-id=*` value from client
+
+**2. Constrained — Client Chooses From Advertised Set**
+
+- **`object-format=<algorithm>`** (both services)
+  - Server advertises: Multiple options, e.g., `object-format=sha256 object-format=sha1`
+  - Client must respond: With ONE of the advertised algorithms only
+  - Spec: "When provided by the client, this indicates that it intends to use the given hash algorithm to communicate. The algorithm provided must be one that the server supports."
+  - Purpose: Hash algorithm negotiation for object IDs
+  - Validation: Client value MUST be in set of advertised values
+
+- **`filter=<type>`** (upload-pack only, partial clone)
+  - Server advertises: Supported filter types
+  - Client requests: From advertised set only
+  - Spec: "If the upload-pack server advertises the *filter* capability, fetch-pack may send 'filter' commands to request a partial clone..."
+  - Validation: Client value MUST be in advertised set
+
+**3. One-Directional — Server Only**
+
+- **`symref=<name>:<target>`** (both services, informational)
+  - Server advertises: Which symbolic refs point to which refs, e.g., `symref=HEAD:refs/heads/main`
+  - Client: Consumes information, does NOT send back
+  - Spec: "This parameterized capability is used to inform the receiver which symbolic ref points to which ref... This capability can be repeated to represent multiple symrefs."
+  - Purpose: Inform client of initial HEAD without extra round-trip
+  - Validation: Clients never send this capability
+
+**4. Challenge-Response — Server Provides, Client Uses**
+
+- **`push-cert=<nonce>`** (receive-pack only)
+  - Server advertises: A nonce value for this push
+  - Client includes: The EXACT nonce in signed push certificate
+  - Spec: "A send-pack client MUST NOT send a push-cert packet unless the receive-pack server advertises this capability."
+  - Purpose: Prevent replay attacks on signed pushes
+  - Validation: Client MUST use the exact nonce server provided
+
+#### Binary Flag Capabilities (No Parameters)
+
+These are on/off flags, not parameterized:
+- `multi_ack`, `multi_ack_detailed` — multi-ACK protocol support
+- `no-done` — omit "done" command requirement
+- `thin-pack` — server understands thin pack format
+- `side-band`, `side-band-64k` — multiplexing progress/error on side channel
+- `ofs-delta` — server understands OBJ_OFS_DELTA format
+- `delete-refs` — server accepts zero-id (ref deletion)
+- `quiet` — suppress progress output if requested
+- `atomic` — apply all ref updates atomically or none
+- `report-status`, `report-status-v2` — server sends push result report
+- `allow-tip-sha1-in-want`, `allow-reachable-sha1-in-want` — permit requesting arbitrary SHAs
+- `push-options` — server accepts push options
+- `shallow`, `include-tag`, `no-progress`, `deepen-relative` — fetch-related flags
+
+#### Protocol v2 Differences
+
+In Protocol v2, capabilities are in their own section (not hidden behind NUL byte):
+
+```
+key[=value] LF
+key[=value] LF
+...
+```
+
+Rules:
+- `key = 1*(ALPHA | DIGIT | "-_")`
+- `value = 1*(ALPHA | DIGIT | " -_.,?\/{}[]()<>!@#$%^&*+=:;")`
+
+Parameterized capabilities in v2:
+- `agent=X` (same rules as v0/v1)
+- `ls-refs` (with features: `ls-refs=symrefs peel ref-prefix`)
+- `fetch` (with features: `fetch=<feature> <feature>`)
+- `push` (with features)
+
+#### Implementation: Validation Pattern
+
+```elixir
+# Correct validation for mixed parameterized/binary capabilities
+unknown_caps = Enum.reject(caps, fn cap ->
+  # Binary flags: exact match
+  cap in advertised_caps or
+  # Parameterized with free choice (agent, session-id)
+  String.starts_with?(cap, "agent=") or
+  String.starts_with?(cap, "session-id=") or
+  # Parameterized with constraints (object-format, filter)
+  cap_name_in_advertised?(cap, advertised_caps, ["object-format", "filter"]) or
+  # Parameterized one-way (symref) — never from client
+  String.starts_with?(cap, "symref=")
+end)
+
+if unknown_caps != [] do
+  abort_with_error("unknown capabilities: #{inspect(unknown_caps)}")
+end
+
+defp cap_name_in_advertised?(cap, advertised_caps, names) do
+  Enum.any?(names, fn name ->
+    String.starts_with?(cap, name <> "=") and
+    Enum.any?(advertised_caps, &String.starts_with?(&1, name <> "="))
+  end)
+end
+```
+
+#### Summary: Implementation Decision Tree
+
+When validating client capability `cap` against server `advertised_caps`:
+
+1. **Is `cap` exactly in `advertised_caps`?** → ALLOW (binary flag match)
+2. **Does `cap` start with `agent=` or `session-id=`?** → ALLOW (client has freedom)
+3. **Does `cap` start with `object-format=` or `filter=`?** → ALLOW if name is advertised and value is from advertised set
+4. **Does `cap` start with `symref=`?** → REJECT (server-only)
+5. **Anything else?** → REJECT (unknown capability)
+
+**Key Insight**: The protocol distinguishes between capabilities where clients have freedom to provide different values (agent, session-id) versus capabilities where clients must choose from a constrained set (object-format, filter). Conflating these leads to protocol violations.
+
 ### Key Invariants
 
 1. **After `parse_caps/1` extracts client capabilities**: `caps` = client-requested, `advertised_caps` = server-advertised

@@ -77,8 +77,8 @@ defmodule GitRekt.WireProtocol.ReceivePack do
         {caps, cmds} = parse_caps(cmds)
         Logger.debug("UPDATE_REQ: client_caps=#{inspect(caps)}, advertised_caps=#{inspect(advertised_caps)}")
 
-        # Validate: client MUST NOT send capabilities server didn't advertise
-        unknown_caps = caps -- advertised_caps
+        # Validate client capabilities against advertised capabilities per Git protocol spec
+        unknown_caps = GitRekt.WireProtocol.validate_capabilities(caps, advertised_caps)
         if unknown_caps != [] do
           Logger.error("UPDATE_REQ: client sent unknown capabilities: #{inspect(unknown_caps)}")
           raise "unknown capabilities: #{inspect(unknown_caps)}"

@@ -8,16 +8,19 @@ defmodule GitRekt.WireProtocol.UploadPack do
   alias GitRekt.Git
   alias GitRekt.GitAgent
 
+  require Logger
+
   import GitRekt.WireProtocol, only: [reference_discovery: 3]
 
   @service_name "git-upload-pack"
 
-  defstruct [:agent, state: :disco, caps: [], wants: [], haves: []]
+  defstruct [:agent, state: :disco, caps: [], advertised_caps: [], wants: [], haves: []]
 
   @type t :: %__MODULE__{
     agent: GitAgent.agent,
     state: :disco | :upload_req | :upload_haves | :pack | :done,
     caps: [binary],
+    advertised_caps: [binary],
     wants: [Git.oid],
     haves: [Git.oid],
   }
@@ -28,20 +31,31 @@ defmodule GitRekt.WireProtocol.UploadPack do
 
   @impl true
   def next(%__MODULE__{state: :disco} = handle, [:flush|lines]) do
-    {%{handle|state: :done, caps: []}, lines, reference_discovery(handle.agent, @service_name, handle.caps)}
+    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
+    {%{handle|state: :done, caps: [], advertised_caps: advertised}, lines, reference_discovery(handle.agent, @service_name, handle.caps)}
   end
 
   def next(%__MODULE__{state: :disco} = handle, lines) do
-    {%{handle|state: :upload_req, caps: []}, lines, reference_discovery(handle.agent, @service_name, handle.caps)}
+    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
+    {%{handle|state: :upload_req, caps: [], advertised_caps: advertised}, lines, reference_discovery(handle.agent, @service_name, handle.caps)}
   end
 
   def next(%__MODULE__{state: :upload_req} = handle, [:flush|lines]) do
     {%{handle|state: :done}, lines, []}
   end
 
-  def next(%__MODULE__{state: :upload_req} = handle, lines) do
+  def next(%__MODULE__{state: :upload_req, advertised_caps: advertised_caps} = handle, lines) do
     {wants, lines} = Enum.split_while(lines, &obj_match?(&1, :want))
     {caps, wants} = parse_caps(wants)
+    Logger.debug("UPLOAD_REQ: client_caps=#{inspect(caps)}, advertised_caps=#{inspect(advertised_caps)}")
+
+    # Validate client capabilities against advertised capabilities per Git protocol spec
+    unknown_caps = GitRekt.WireProtocol.validate_capabilities(caps, advertised_caps)
+    if unknown_caps != [] do
+      Logger.error("UPLOAD_REQ: client sent unknown capabilities: #{inspect(unknown_caps)}")
+      raise "unknown capabilities: #{inspect(unknown_caps)}"
+    end
+
     {_shallows, lines} = Enum.split_while(lines, &obj_match?(&1, :shallow))
     [:flush|lines] = lines
     {%{handle|state: :upload_haves, caps: caps, wants: parse_cmds(wants)}, lines, []}
@@ -95,7 +109,10 @@ defmodule GitRekt.WireProtocol.UploadPack do
   end
 
   @impl true
-  def skip(%__MODULE__{state: :disco} = handle), do: %{handle|state: :upload_req, caps: []}
+  def skip(%__MODULE__{state: :disco} = handle) do
+    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
+    %{handle|state: :upload_req, caps: [], advertised_caps: advertised}
+  end
   def skip(%__MODULE__{state: :upload_req} = handle), do: %{handle|state: :upload_haves}
   def skip(%__MODULE__{state: :upload_haves} = handle), do: %{handle|state: :pack}
   def skip(%__MODULE__{state: :pack} = handle), do: %{handle|state: :done}
