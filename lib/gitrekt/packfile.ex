@@ -137,58 +137,29 @@ defmodule GitRekt.Packfile do
   defp unpack_obj_delta_hunk("", cmds), do: Enum.reverse(cmds)
 
   defp delta_copy_range(x, rest) do
-    offset = 0
-    size = 0
-
-    {offset, rest} =
-      if (x &&& 0x01) > 0 do
-        <<c::size(8), rest::binary>> = rest
-        {c, rest}
-      end || {offset, rest}
-
-    {offset, rest} =
-      if (x &&& 0x02) > 0 do
-        <<c::size(8), rest::binary>> = rest
-        {offset ||| c <<< 8, rest}
-      end || {offset, rest}
-
-    {offset, rest} =
-      if (x &&& 0x04) > 0 do
-        <<c::size(8), rest::binary>> = rest
-        {offset ||| c <<< 16, rest}
-      end || {offset, rest}
-
-    {offset, rest} =
-      if (x &&& 0x08) > 0 do
-        <<c::size(8), rest::binary>> = rest
-        {offset ||| c <<< 24, rest}
-      end || {offset, rest}
-
-    {size, rest} =
-      if (x &&& 0x10) > 0 do
-        <<c::size(8), rest::binary>> = rest
-        {c, rest}
-      end || {size, rest}
-
-    {size, rest} =
-      if (x &&& 0x20) > 0 do
-        <<c::size(8), rest::binary>> = rest
-        {size ||| c <<< 8, rest}
-      end || {size, rest}
-
-    {size, rest} =
-      if (x &&& 0x40) > 0 do
-        <<c::size(8), rest::binary>> = rest
-        {size ||| c <<< 16, rest}
-      end || {size, rest}
-
-    size =
-      if size == 0,
-        do: 0x10000,
-        else: size
-
+    {offset, rest} = extract_bytes(x, [0x01, 0x02, 0x04, 0x08], rest, 0)
+    {size, rest} = extract_bytes(x, [0x10, 0x20, 0x40], rest, 0)
+    size = if size == 0, do: 0x10000, else: size
     {offset, size, rest}
   end
+
+  defp extract_bytes(x, masks, rest, value) do
+    Enum.reduce(masks, {value, rest}, fn mask, {acc, data} ->
+      if (x &&& mask) > 0 do
+        <<c::size(8), new_data::binary>> = data
+        shift = count_trailing_zeros(mask) * 8
+        {acc ||| c <<< shift, new_data}
+      else
+        {acc, data}
+      end
+    end)
+  end
+
+  defp count_trailing_zeros(0), do: 0
+
+  defp count_trailing_zeros(n) when (n &&& 1) > 0, do: 0
+
+  defp count_trailing_zeros(n), do: 1 + count_trailing_zeros(n >>> 1)
 
   defp format_obj_type(1), do: :commit
   defp format_obj_type(2), do: :tree
