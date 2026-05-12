@@ -96,12 +96,18 @@ defmodule GitRekt.WireProtocol.ReceivePack do
 
         [:flush | lines] = lines
 
+        parsed_cmds = parse_cmds(cmds)
+        Logger.debug("UPDATE_REQ parsed_cmds=#{inspect(parsed_cmds)}")
+
+        # If all commands are deletions, we transition to :done because no packfile is sent
+        state = if Enum.all?(parsed_cmds, &match?({:delete, _, _}, &1)), do: :done, else: :pack
+
         {%{
            handle
-           | state: :pack,
+           | state: state,
              caps: caps,
              advertised_caps: advertised_caps || caps,
-             cmds: parse_cmds(cmds),
+             cmds: parsed_cmds,
              writepack: writepack
          }, lines, []}
 
