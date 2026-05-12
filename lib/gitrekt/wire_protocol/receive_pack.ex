@@ -17,116 +17,147 @@ defmodule GitRekt.WireProtocol.ReceivePack do
 
   @null_oid String.duplicate("0", 40)
 
-  defstruct [
-    agent: nil,
-    state: :disco,
-    caps: [],
-    advertised_caps: [],
-    cmds: [],
-    repo: nil,
-    writepack: nil,
-    writepack_progress: %{
-      total_objects: 0,
-      indexed_objects: 0,
-      received_objects: 0,
-      local_objects: 0,
-      total_deltas: 0,
-      indexed_deltas: 0,
-      received_bytes: 0,
-    }
-  ]
+  defstruct agent: nil,
+            state: :disco,
+            caps: [],
+            advertised_caps: [],
+            cmds: [],
+            repo: nil,
+            writepack: nil,
+            writepack_progress: %{
+              total_objects: 0,
+              indexed_objects: 0,
+              received_objects: 0,
+              local_objects: 0,
+              total_deltas: 0,
+              indexed_deltas: 0,
+              received_bytes: 0
+            }
 
-  @type cmd :: {:create, Git.oid, binary} | {:update, Git.oid, Git.oid, binary} | {:delete, Git.oid, binary}
+  @type cmd ::
+          {:create, Git.oid(), binary}
+          | {:update, Git.oid(), Git.oid(), binary}
+          | {:delete, Git.oid(), binary}
 
   @type t :: %__MODULE__{
-    agent: GitAgent.agent,
-    state: :disco | :update_req | :pack | :buffer | :done,
-    caps: [binary],
-    cmds: [cmd],
-    repo: GitRepo.t,
-    writepack: GitWritePack.t,
-    writepack_progress: Git.odb_writepack_progress
-  }
+          agent: GitAgent.agent(),
+          state: :disco | :update_req | :pack | :buffer | :done,
+          caps: [binary],
+          cmds: [cmd],
+          repo: GitRepo.t(),
+          writepack: GitWritePack.t(),
+          writepack_progress: Git.odb_writepack_progress()
+        }
 
   #
   # Callbacks
   #
 
   @impl true
-  def next(%__MODULE__{state: :disco} = handle, [:flush|lines]) do
+  def next(%__MODULE__{state: :disco} = handle, [:flush | lines]) do
     Logger.debug("RECEIVE_PACK disco->done: clearing caps from #{inspect(handle.caps)}")
-    {%{handle|state: :done, caps: []}, lines, reference_discovery(handle.agent, @service_name, handle.caps)}
+
+    {%{handle | state: :done, caps: []}, lines,
+     reference_discovery(handle.agent, @service_name, handle.caps)}
   end
 
   def next(%__MODULE__{state: :disco} = handle, lines) do
     advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
     Logger.debug("RECEIVE_PACK disco->update_req: advertised_caps=#{inspect(advertised)}")
-    {%{handle|state: :update_req, advertised_caps: advertised}, lines, reference_discovery(handle.agent, @service_name, handle.caps)}
+
+    {%{handle | state: :update_req, advertised_caps: advertised}, lines,
+     reference_discovery(handle.agent, @service_name, handle.caps)}
   end
 
-  def next(%__MODULE__{state: :update_req} = handle, [:flush|lines]) do
-    {%{handle|state: :done}, lines, []}
+  def next(%__MODULE__{state: :update_req} = handle, [:flush | lines]) do
+    {%{handle | state: :done}, lines, []}
   end
 
   def next(%__MODULE__{state: :update_req, advertised_caps: advertised_caps} = handle, lines) do
     require Logger
+
     case GitAgent.odb_writepack(handle.agent) do
       {:ok, writepack} ->
         {_shallows, lines} = Enum.split_while(lines, &match?({:shallow, _oid}, &1))
         {cmds, lines} = Enum.split_while(lines, &is_binary/1)
         {caps, cmds} = parse_caps(cmds)
-        Logger.debug("UPDATE_REQ: client_caps=#{inspect(caps)}, advertised_caps=#{inspect(advertised_caps)}")
+
+        Logger.debug(
+          "UPDATE_REQ: client_caps=#{inspect(caps)}, advertised_caps=#{inspect(advertised_caps)}"
+        )
 
         # Validate client capabilities against advertised capabilities per Git protocol spec
         unknown_caps = GitRekt.WireProtocol.validate_capabilities(caps, advertised_caps)
+
         if unknown_caps != [] do
           Logger.error("UPDATE_REQ: client sent unknown capabilities: #{inspect(unknown_caps)}")
           raise "unknown capabilities: #{inspect(unknown_caps)}"
         end
 
-        [:flush|lines] = lines
-        {%{handle|state: :pack, caps: caps, advertised_caps: advertised_caps || caps, cmds: parse_cmds(cmds), writepack: writepack}, lines, []}
+        [:flush | lines] = lines
+
+        {%{
+           handle
+           | state: :pack,
+             caps: caps,
+             advertised_caps: advertised_caps || caps,
+             cmds: parse_cmds(cmds),
+             writepack: writepack
+         }, lines, []}
+
       {:error, error} ->
         raise error
     end
   end
 
   def next(%__MODULE__{state: :pack} = handle, [{:pack, pack_data}]) do
-    case GitAgent.odb_writepack_append(handle.agent, handle.writepack, pack_data, handle.writepack_progress) do
+    case GitAgent.odb_writepack_append(
+           handle.agent,
+           handle.writepack,
+           pack_data,
+           handle.writepack_progress
+         ) do
       {:ok, progress} when progress.received_objects == progress.total_objects ->
-        {%{handle|state: :done, writepack_progress: progress}, [], []}
+        {%{handle | state: :done, writepack_progress: progress}, [], []}
+
       {:ok, progress} ->
-        {%{handle|state: :buffer, writepack_progress: progress}, [], []}
+        {%{handle | state: :buffer, writepack_progress: progress}, [], []}
+
       {:error, error} ->
         raise error
     end
   end
 
   def next(%__MODULE__{state: :pack} = handle, []) do
-    {%{handle|state: :done}, [], []}
+    {%{handle | state: :done}, [], []}
   end
 
   def next(%__MODULE__{state: :buffer} = handle, pack_data) do
-    {%{handle|state: :pack}, [{:pack, pack_data}], []}
+    {%{handle | state: :pack}, [{:pack, pack_data}], []}
   end
 
   def next(%__MODULE__{state: :done} = handle, []) do
     if handle.cmds != [] do
-      with  :ok <- push_pack(handle.agent, handle.writepack, handle.writepack_progress),
-            :ok <- GitRepo.pre_push(handle.repo, handle.cmds),
-            :ok <- push_cmds(handle.agent, handle.cmds),
+      with :ok <- push_pack(handle.agent, handle.writepack, handle.writepack_progress),
+           :ok <- GitRepo.pre_push(handle.repo, handle.cmds),
+           :ok <- push_cmds(handle.agent, handle.cmds),
            {:ok, repo} <- GitRepo.push(handle.repo, handle.cmds) do
         output = if "report-status" in handle.caps, do: report_status(handle), else: []
-        {%{handle|repo: repo, cmds: []}, [], output}
+        {%{handle | repo: repo, cmds: []}, [], output}
       else
         {:error, reason} ->
           error_msg = if is_binary(reason), do: reason, else: inspect(reason)
-          output = if "report-status" in handle.caps do
-            cmd_rejections = Enum.map(handle.cmds, &"ng #{elem(&1, :erlang.tuple_size(&1)-1)} #{error_msg}")
-            ["unpack #{error_msg}"] ++ cmd_rejections ++ [:flush]
-          else
-            []
-          end
+
+          output =
+            if "report-status" in handle.caps do
+              cmd_rejections =
+                Enum.map(handle.cmds, &"ng #{elem(&1, :erlang.tuple_size(&1) - 1)} #{error_msg}")
+
+              ["unpack #{error_msg}"] ++ cmd_rejections ++ [:flush]
+            else
+              []
+            end
+
           {handle, [], output}
       end
     else
@@ -137,17 +168,24 @@ defmodule GitRekt.WireProtocol.ReceivePack do
   @impl true
   def skip(%__MODULE__{state: :disco, caps: caps} = handle) do
     advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ caps
-    Logger.debug("SKIP disco->update_req: caps=#{inspect(caps)}, advertised_caps=#{inspect(advertised)}")
-    %{handle|state: :update_req, advertised_caps: advertised}
+
+    Logger.debug(
+      "SKIP disco->update_req: caps=#{inspect(caps)}, advertised_caps=#{inspect(advertised)}"
+    )
+
+    %{handle | state: :update_req, advertised_caps: advertised}
   end
+
   def skip(%__MODULE__{state: :update_req, caps: caps} = handle) do
     Logger.debug("SKIP update_req->pack: caps=#{inspect(caps)}")
-    %{handle|state: :pack}
+    %{handle | state: :pack}
   end
+
   def skip(%__MODULE__{state: :pack, caps: caps} = handle) do
     Logger.debug("SKIP pack->done: caps=#{inspect(caps)}")
-    %{handle|state: :done}
+    %{handle | state: :done}
   end
+
   def skip(%__MODULE__{state: :done} = handle), do: handle
 
   #
@@ -160,8 +198,10 @@ defmodule GitRekt.WireProtocol.ReceivePack do
       case String.split(cmd, " ", parts: 3) do
         [@null_oid, new, name] ->
           {:create, Git.oid_parse(new), name}
+
         [old, @null_oid, name] ->
           {:delete, Git.oid_parse(old), name}
+
         [old, new, name] ->
           {:update, Git.oid_parse(old), Git.oid_parse(new), name}
       end
@@ -170,17 +210,18 @@ defmodule GitRekt.WireProtocol.ReceivePack do
 
   @doc false
   def parse_caps([]), do: {[], []}
-  def parse_caps([first_ref|refs]) do
+
+  def parse_caps([first_ref | refs]) do
     case String.split(first_ref, "\0", parts: 2) do
-      [first_ref] -> {[], [first_ref|refs]}
-      [first_ref, caps] -> {String.split(caps, " ", trim: true), [first_ref|refs]}
+      [first_ref] -> {[], [first_ref | refs]}
+      [first_ref, caps] -> {String.split(caps, " ", trim: true), [first_ref | refs]}
     end
   end
 
   @doc false
   def report_status(%__MODULE__{caps: _caps, cmds: cmds}) do
     require Logger
-    cmd_statuses = Enum.map(cmds, &"ok #{elem(&1, :erlang.tuple_size(&1)-1)}")
+    cmd_statuses = Enum.map(cmds, &"ok #{elem(&1, :erlang.tuple_size(&1) - 1)}")
     result = ["unpack ok"] ++ cmd_statuses ++ [:flush]
     Logger.debug("REPORT_STATUS raw lines: #{inspect(result)}")
     encoded = GitRekt.WireProtocol.encode(result)
@@ -192,10 +233,12 @@ defmodule GitRekt.WireProtocol.ReceivePack do
   end
 
   defp push_pack(_agent, _writepack, progress) when progress.received_bytes == 0, do: :ok
+
   defp push_pack(agent, writepack, progress) do
     case GitAgent.odb_writepack_commit(agent, writepack, progress) do
       {:ok, _progress} ->
         :ok
+
       {:error, reason} ->
         {:error, reason}
     end

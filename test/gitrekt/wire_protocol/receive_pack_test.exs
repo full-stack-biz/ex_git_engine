@@ -25,7 +25,8 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
       # Create a handle WITHOUT report-status capability
       # Note: report_status/1 always generates a report; the caller (next/2) checks caps
       handle = %ReceivePack{
-        caps: ["delete-refs"],  # No report-status
+        # No report-status
+        caps: ["delete-refs"],
         cmds: [
           {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"}
         ]
@@ -37,7 +38,8 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
       # So this test verifies that when report-status is NOT in caps, the calling code
       # would not call report_status in the first place
       assert "report-status" not in handle.caps
-      assert :flush in result  # Function still generates report (caller filters)
+      # Function still generates report (caller filters)
+      assert :flush in result
     end
 
     test "includes all command refs in report-status response" do
@@ -46,7 +48,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
         cmds: [
           {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"},
           {:update, Git.oid_parse("0000000000000000000000000000000000000001"),
-                    Git.oid_parse("0000000000000000000000000000000000000002"), "refs/heads/develop"},
+           Git.oid_parse("0000000000000000000000000000000000000002"), "refs/heads/develop"},
           {:delete, Git.oid_parse("0000000000000000000000000000000000000003"), "refs/heads/old"}
         ]
       }
@@ -83,7 +85,11 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
       error_response = ["unpack ng #{error_msg}", :flush]
 
       assert error_response == ["unpack ng ref update failed", :flush]
-      assert Enum.any?(error_response, fn item -> is_binary(item) && String.starts_with?(item, "unpack ng") end)
+
+      assert Enum.any?(error_response, fn item ->
+               is_binary(item) && String.starts_with?(item, "unpack ng")
+             end)
+
       assert :flush in error_response
     end
 
@@ -107,7 +113,10 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
 
   describe "parse_cmds/1" do
     test "parses create command (old OID is null)" do
-      cmds = ["0000000000000000000000000000000000000000 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa refs/heads/main"]
+      cmds = [
+        "0000000000000000000000000000000000000000 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa refs/heads/main"
+      ]
+
       result = ReceivePack.parse_cmds(cmds)
 
       assert length(result) == 1
@@ -116,7 +125,10 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     end
 
     test "parses update command (both OIDs present)" do
-      cmds = ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb refs/heads/main"]
+      cmds = [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb refs/heads/main"
+      ]
+
       result = ReceivePack.parse_cmds(cmds)
 
       assert length(result) == 1
@@ -126,7 +138,10 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     end
 
     test "parses delete command (new OID is null)" do
-      cmds = ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 0000000000000000000000000000000000000000 refs/heads/old"]
+      cmds = [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 0000000000000000000000000000000000000000 refs/heads/old"
+      ]
+
       result = ReceivePack.parse_cmds(cmds)
 
       assert length(result) == 1
@@ -140,6 +155,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb refs/heads/develop",
         "cccccccccccccccccccccccccccccccccccccccc 0000000000000000000000000000000000000000 refs/heads/old"
       ]
+
       result = ReceivePack.parse_cmds(cmds)
 
       assert length(result) == 3
@@ -151,7 +167,10 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
 
   describe "parse_caps/1" do
     test "extracts capabilities from first ref" do
-      refs = ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa refs/heads/main\0report-status delete-refs"]
+      refs = [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa refs/heads/main\0report-status delete-refs"
+      ]
+
       {caps, cmds} = ReceivePack.parse_caps(refs)
 
       assert caps == ["report-status", "delete-refs"]
@@ -171,17 +190,22 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa refs/heads/main\0report-status",
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb refs/heads/develop"
       ]
+
       {caps, cmds} = ReceivePack.parse_caps(refs)
 
       assert caps == ["report-status"]
+
       assert cmds == [
-        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa refs/heads/main",
-        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb refs/heads/develop"
-      ]
+               "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa refs/heads/main",
+               "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb refs/heads/develop"
+             ]
     end
 
     test "handles multiple space-separated capabilities" do
-      refs = ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa refs/heads/main\0report-status delete-refs agent=test/1.0"]
+      refs = [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa refs/heads/main\0report-status delete-refs agent=test/1.0"
+      ]
+
       {caps, _cmds} = ReceivePack.parse_caps(refs)
 
       assert "report-status" in caps
@@ -227,7 +251,9 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     test "parse_caps extracts capabilities correctly for validation" do
       # Test capability validation logic
       advertised_caps = ["report-status", "delete-refs"]
-      caps_line = "0000000000000000000000000000000000000000 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa refs/heads/main\0report-status delete-refs"
+
+      caps_line =
+        "0000000000000000000000000000000000000000 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa refs/heads/main\0report-status delete-refs"
 
       {caps, _cmds} = ReceivePack.parse_caps([caps_line])
       unknown_caps = caps -- advertised_caps
@@ -238,7 +264,9 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
 
     test "detects unknown capabilities sent by client" do
       advertised_caps = ["report-status", "delete-refs"]
-      caps_line = "0000000000000000000000000000000000000000 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa refs/heads/main\0report-status unknown-cap"
+
+      caps_line =
+        "0000000000000000000000000000000000000000 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa refs/heads/main\0report-status unknown-cap"
 
       {caps, _cmds} = ReceivePack.parse_caps([caps_line])
       unknown_caps = caps -- advertised_caps
@@ -255,7 +283,11 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
       assert "delete-refs" in advertised
       assert "ofs-delta" in advertised
       assert "atomic" in advertised
-      assert String.contains?(Enum.find(advertised, "", &String.starts_with?(&1, "agent=")), "gitrekt")
+
+      assert String.contains?(
+               Enum.find(advertised, "", &String.starts_with?(&1, "agent=")),
+               "gitrekt"
+             )
     end
 
     test "validate_capabilities: binary flags require exact match" do
@@ -468,11 +500,14 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
         cmds: [
           {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"}
         ],
-        caps: [],  # No report-status, so no output
+        # No report-status, so no output
+        caps: [],
         agent: nil,
         writepack: nil,
-        writepack_progress: %{received_bytes: 0},  # No packfile
-        repo: nil  # Would normally be a repo struct
+        # No packfile
+        writepack_progress: %{received_bytes: 0},
+        # Would normally be a repo struct
+        repo: nil
       }
 
       # Even though we can't fully invoke push without a real agent/repo,
@@ -485,7 +520,8 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
 
       # Verify by simulating what the done handler returns:
       # (This is a structural test, not a full integration test)
-      successful_result_handle = %{handle | cmds: []}  # Cmds should be cleared
+      # Cmds should be cleared
+      successful_result_handle = %{handle | cmds: []}
 
       # If done handler is called again on this result_handle, it should be no-op
       {result2, remaining2, output2} = ReceivePack.next(successful_result_handle, [])
