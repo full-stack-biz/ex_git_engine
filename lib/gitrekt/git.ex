@@ -238,72 +238,72 @@ defmodule GitRekt.Git do
 
   alias GitRekt.GitStream
 
-  @type repo                    :: reference
+  @type repo :: reference
 
-  @type oid                     :: binary
-  @type signature               :: {binary, binary, non_neg_integer, non_neg_integer}
+  @type oid :: binary
+  @type signature :: {binary, binary, non_neg_integer, non_neg_integer}
 
-  @type odb                     :: reference
-  @type odb_type                :: atom
+  @type odb :: reference
+  @type odb_type :: atom
 
-  @type odb_writepack           :: reference
-  @type odb_writepack_progress  :: map
+  @type odb_writepack :: reference
+  @type odb_writepack_progress :: map
 
-  @type ref_iter                :: reference
-  @type ref_type                :: :oid | :symbolic
+  @type ref_iter :: reference
+  @type ref_type :: :oid | :symbolic
 
-  @type config                  :: reference
-  @type blob                    :: reference
-  @type commit                  :: reference
-  @type tag                     :: reference
+  @type config :: reference
+  @type blob :: reference
+  @type commit :: reference
+  @type tag :: reference
 
-  @type obj                     :: blob | commit | tree | tag
-  @type obj_type                :: :blob | :commit | :tree | :tag
+  @type obj :: blob | commit | tree | tag
+  @type obj_type :: :blob | :commit | :tree | :tag
 
-  @type reflog_entry            :: {
-    binary,
-    binary,
-    non_neg_integer,
-    non_neg_integer,
-    oid,
-    oid,
-    binary
-  }
+  @type reflog_entry :: {
+          binary,
+          binary,
+          non_neg_integer,
+          non_neg_integer,
+          oid,
+          oid,
+          binary
+        }
 
-  @type tree                    :: reference
-  @type tree_entry              :: {integer, :blob | :tree, oid, binary}
+  @type tree :: reference
+  @type tree_entry :: {integer, :blob | :tree, oid, binary}
 
-  @type diff                    :: reference
-  @type diff_format             :: :patch | :patch_header | :raw | :name_only | :name_status
-  @type diff_delta              :: {diff_file, diff_file, non_neg_integer, non_neg_integer}
-  @type diff_file               :: {oid, binary, integer, non_neg_integer}
-  @type diff_hunk               :: {binary, integer, integer, integer, integer}
-  @type diff_line               :: {char, integer, integer, integer, integer, binary}
+  @type diff :: reference
+  @type diff_format :: :patch | :patch_header | :raw | :name_only | :name_status
+  @type diff_delta :: {diff_file, diff_file, non_neg_integer, non_neg_integer}
+  @type diff_file :: {oid, binary, integer, non_neg_integer}
+  @type diff_hunk :: {binary, integer, integer, integer, integer}
+  @type diff_line :: {char, integer, integer, integer, integer, binary}
 
-  @type index                   :: reference
-  @type index_entry             :: {
-    integer,
-    integer,
-    non_neg_integer,
-    non_neg_integer,
-    non_neg_integer,
-    non_neg_integer,
-    non_neg_integer,
-    integer,
-    binary,
-    non_neg_integer,
-    non_neg_integer,
-    binary
-  }
+  @type index :: reference
+  @type index_entry :: {
+          integer,
+          integer,
+          non_neg_integer,
+          non_neg_integer,
+          non_neg_integer,
+          non_neg_integer,
+          non_neg_integer,
+          integer,
+          binary,
+          non_neg_integer,
+          non_neg_integer,
+          binary
+        }
 
-  @type indexer_progress        :: reference
+  @type indexer_progress :: reference
 
-  @type revwalk                 :: reference
-  @type revwalk_sort            :: :sort_topo | :sort_time | :sort_reverse
+  @type revwalk :: reference
+  @type revwalk_sort :: :sort_topo | :sort_time | :sort_reverse
 
-  @type pack                    :: reference
+  @type pack :: reference
 
-  @type worktree                :: reference
+  @type worktree :: reference
 
   @on_load :load_nif
 
@@ -318,7 +318,7 @@ defmodule GitRekt.Git do
   @doc """
   Returns a repository handle for the `path`.
   """
-  @spec repository_open(Path.t) :: {:ok, repo} | {:error, term}
+  @spec repository_open(Path.t()) :: {:ok, repo} | {:error, term}
   def repository_open(_path) do
     :erlang.nif_error(:not_loaded)
   end
@@ -342,7 +342,7 @@ defmodule GitRekt.Git do
   @doc """
   Returns the absolute path for the given `repo`.
   """
-  @spec repository_get_path(repo) :: Path.t
+  @spec repository_get_path(repo) :: Path.t()
   def repository_get_path(_repo) do
     :erlang.nif_error(:not_loaded)
   end
@@ -350,9 +350,9 @@ defmodule GitRekt.Git do
   @doc """
   Returns the normalized path to the working directory for the given `repo`.
   """
-  @spec repository_get_workdir(repo) :: Path.t
+  @spec repository_get_workdir(repo) :: Path.t()
   def repository_get_workdir(_repo) do
-      :erlang.nif_error(:not_loaded)
+    :erlang.nif_error(:not_loaded)
   end
 
   @doc """
@@ -382,7 +382,7 @@ defmodule GitRekt.Git do
   @doc """
   Initializes a new repository at the given `path`.
   """
-  @spec repository_init(Path.t, boolean, binary) :: {:ok, repo} | {:error, term}
+  @spec repository_init(Path.t(), boolean, binary) :: {:ok, repo} | {:error, term}
   def repository_init(_path, _bare \\ false, _initial_head \\ "master") do
     :erlang.nif_error(:not_loaded)
   end
@@ -390,7 +390,7 @@ defmodule GitRekt.Git do
   @doc """
   Looks for a repository and returns its path.
   """
-  @spec repository_discover(Path.t) :: {:ok, Path.t} | {:error, term}
+  @spec repository_discover(Path.t()) :: {:ok, Path.t()} | {:error, term}
   def repository_discover(_path) do
     :erlang.nif_error(:not_loaded)
   end
@@ -406,7 +406,8 @@ defmodule GitRekt.Git do
   @doc """
   Recursively peels the given reference `name` until an object of type `type` is found.
   """
-  @spec reference_peel(repo, binary, obj_type | :undefined) :: {:ok, obj_type, oid, obj} | {:error, term}
+  @spec reference_peel(repo, binary, obj_type | :undefined) ::
+          {:ok, obj_type, oid, obj} | {:error, term}
   def reference_peel(_repo, _name, _type \\ :undefined) do
     :erlang.nif_error(:not_loaded)
   end
@@ -470,7 +471,7 @@ defmodule GitRekt.Git do
   @doc """
   Returns a stream for the references that match the specific `glob` pattern.
   """
-  @spec reference_stream(repo, binary | :undefined) :: {:ok, Enumerable.t} | {:error, term}
+  @spec reference_stream(repo, binary | :undefined) :: {:ok, Enumerable.t()} | {:error, term}
   def reference_stream(repo, glob \\ :undefined) do
     case reference_iterator(repo, glob) do
       {:ok, iter} -> {:ok, GitStream.new(iter, &reference_stream_next/1)}
@@ -649,7 +650,8 @@ defmodule GitRekt.Git do
   @doc """
   Inflates the given `data` with *zlib*.
   """
-  @spec object_zlib_inflate(binary, pos_integer) :: {:ok, iodata, non_neg_integer} | {:error, term}
+  @spec object_zlib_inflate(binary, pos_integer) ::
+          {:ok, iodata, non_neg_integer} | {:error, term}
   def object_zlib_inflate(_data, _buffer_size \\ 16_384) do
     :erlang.nif_error(:not_loaded)
   end
@@ -657,11 +659,12 @@ defmodule GitRekt.Git do
   @doc """
   Returns parent commits of the given `commit`.
   """
-  @spec commit_parents(commit) :: {:ok, Enumerable.t} | {:error, term}
+  @spec commit_parents(commit) :: {:ok, Enumerable.t()} | {:error, term}
   def commit_parents(commit) do
     case commit_parent_count(commit) do
       {:ok, count} ->
         {:ok, GitStream.new(commit, {commit, 0, count}, &commit_parent_stream_next/1)}
+
       {:error, reason} ->
         {:error, reason}
     end
@@ -702,7 +705,16 @@ defmodule GitRekt.Git do
   @doc """
   Creates a new commit with the given params.
   """
-  @spec commit_create(repo, binary | :undefined, signature, signature, binary | :undefined, binary, oid, [binary]) :: {:ok, oid} | {:error, term}
+  @spec commit_create(
+          repo,
+          binary | :undefined,
+          signature,
+          signature,
+          binary | :undefined,
+          binary,
+          oid,
+          [binary]
+        ) :: {:ok, oid} | {:error, term}
   def commit_create(_repo, _ref, _author, _commiter, _encoding, _message, _tree, _parents) do
     :erlang.nif_error(:not_loaded)
   end
@@ -718,7 +730,8 @@ defmodule GitRekt.Git do
   @doc """
   Returns the author of the given `commit`.
   """
-  @spec commit_author(commit) :: {:ok, binary, binary, non_neg_integer, non_neg_integer} | {:error, term}
+  @spec commit_author(commit) ::
+          {:ok, binary, binary, non_neg_integer, non_neg_integer} | {:error, term}
   def commit_author(_commit) do
     :erlang.nif_error(:not_loaded)
   end
@@ -726,7 +739,8 @@ defmodule GitRekt.Git do
   @doc """
   Returns the committer of the given `commit`.
   """
-  @spec commit_committer(commit) :: {:ok, binary, binary, non_neg_integer, non_neg_integer} | {:error, term}
+  @spec commit_committer(commit) ::
+          {:ok, binary, binary, non_neg_integer, non_neg_integer} | {:error, term}
   def commit_committer(_commit) do
     :erlang.nif_error(:not_loaded)
   end
@@ -766,7 +780,7 @@ defmodule GitRekt.Git do
   @doc """
   Retrieves a tree entry contained in the given `tree` or in any of its subtrees, given its relative path.
   """
-  @spec tree_bypath(tree, Path.t) :: {:ok, integer, atom, binary, binary} | {:error, term}
+  @spec tree_bypath(tree, Path.t()) :: {:ok, integer, atom, binary, binary} | {:error, term}
   def tree_bypath(_tree, _path) do
     :erlang.nif_error(:not_loaded)
   end
@@ -790,11 +804,12 @@ defmodule GitRekt.Git do
   @doc """
   Returns all entries in the given `tree`.
   """
-  @spec tree_entries(tree) :: {:ok, Enumerable.t} | {:error, term}
+  @spec tree_entries(tree) :: {:ok, Enumerable.t()} | {:error, term}
   def tree_entries(tree) do
     case tree_count(tree) do
       {:ok, _count} ->
         {:ok, GitStream.new(tree, {tree, 0}, &tree_stream_next/1)}
+
       {:error, reason} ->
         {:error, reason}
     end
@@ -851,7 +866,8 @@ defmodule GitRekt.Git do
   @doc """
   Returns the author of the given `tag`.
   """
-  @spec tag_author(tag) :: {:ok, binary, binary, non_neg_integer, non_neg_integer} | {:error, term}
+  @spec tag_author(tag) ::
+          {:ok, binary, binary, non_neg_integer, non_neg_integer} | {:error, term}
   def tag_author(_tag) do
     :erlang.nif_error(:not_loaded)
   end
@@ -915,7 +931,7 @@ defmodule GitRekt.Git do
   @doc """
   Returns a stream for the given revision `walk`.
   """
-  @spec revwalk_stream(revwalk) :: {:ok, Enumerable.t} | {:error, term}
+  @spec revwalk_stream(revwalk) :: {:ok, Enumerable.t()} | {:error, term}
   def revwalk_stream(walk) do
     {:ok, GitStream.new(walk, &revwalk_stream_next/1)}
   end
@@ -955,7 +971,8 @@ defmodule GitRekt.Git do
   @doc """
   Returns stats for the given `diff`.
   """
-  @spec diff_stats(diff) :: {:ok, non_neg_integer, non_neg_integer, non_neg_integer} | {:error, term}
+  @spec diff_stats(diff) ::
+          {:ok, non_neg_integer, non_neg_integer, non_neg_integer} | {:error, term}
   def diff_stats(_diff) do
     :erlang.nif_error(:not_loaded)
   end
@@ -1036,19 +1053,10 @@ defmodule GitRekt.Git do
   Looks for an entry by its position in the given `index`.
   """
   @spec index_nth(index, non_neg_integer) ::
-  {:ok, integer,
-        integer,
-        non_neg_integer,
-        non_neg_integer,
-        non_neg_integer,
-        non_neg_integer,
-        non_neg_integer,
-        integer,
-        binary,
-        non_neg_integer,
-        non_neg_integer,
-        binary} |
-  {:error, term}
+          {:ok, integer, integer, non_neg_integer, non_neg_integer, non_neg_integer,
+           non_neg_integer, non_neg_integer, integer, binary, non_neg_integer, non_neg_integer,
+           binary}
+          | {:error, term}
 
   def index_nth(_index, _nth) do
     :erlang.nif_error(:not_loaded)
@@ -1057,20 +1065,11 @@ defmodule GitRekt.Git do
   @doc """
   Retrieves an entry contained in the `index` given its relative path.
   """
-  @spec index_bypath(index, Path.t, non_neg_integer) ::
-  {:ok, integer,
-        integer,
-        non_neg_integer,
-        non_neg_integer,
-        non_neg_integer,
-        non_neg_integer,
-        non_neg_integer,
-        integer,
-        binary,
-        non_neg_integer,
-        non_neg_integer,
-        binary} |
-  {:error, term}
+  @spec index_bypath(index, Path.t(), non_neg_integer) ::
+          {:ok, integer, integer, non_neg_integer, non_neg_integer, non_neg_integer,
+           non_neg_integer, non_neg_integer, integer, binary, non_neg_integer, non_neg_integer,
+           binary}
+          | {:error, term}
   def index_bypath(_index, _path, _stage) do
     :erlang.nif_error(:not_loaded)
   end
@@ -1086,7 +1085,7 @@ defmodule GitRekt.Git do
   @doc """
   Removes an entry from the given `index`.
   """
-  @spec index_remove(index, Path.t, non_neg_integer) :: :ok | {:error, term}
+  @spec index_remove(index, Path.t(), non_neg_integer) :: :ok | {:error, term}
   def index_remove(_index, _path, _stage \\ 0) do
     :erlang.nif_error(:not_loaded)
   end
@@ -1094,7 +1093,7 @@ defmodule GitRekt.Git do
   @doc """
   Removes all entries from the given `index` under a given directory.
   """
-  @spec index_remove_dir(index, Path.t, non_neg_integer) :: :ok | {:error, term}
+  @spec index_remove_dir(index, Path.t(), non_neg_integer) :: :ok | {:error, term}
   def index_remove_dir(_index, _path, _stage \\ 0) do
     :erlang.nif_error(:not_loaded)
   end
@@ -1110,7 +1109,8 @@ defmodule GitRekt.Git do
   @doc """
   Returns the default signature for the given `repo`.
   """
-  @spec signature_default(repo) :: {:ok, binary, binary, non_neg_integer, non_neg_integer} | {:error, term}
+  @spec signature_default(repo) ::
+          {:ok, binary, binary, non_neg_integer, non_neg_integer} | {:error, term}
   def signature_default(_repo) do
     :erlang.nif_error(:not_loaded)
   end
@@ -1126,7 +1126,8 @@ defmodule GitRekt.Git do
   @doc """
   Creates a new signature with the given `name`, `email` and `time`.
   """
-  @spec signature_new(binary, binary, non_neg_integer) :: {:ok, binary, binary, non_neg_integer, non_neg_integer} | {:error, term}
+  @spec signature_new(binary, binary, non_neg_integer) ::
+          {:ok, binary, binary, non_neg_integer, non_neg_integer} | {:error, term}
   def signature_new(_name, _email, _time) do
     :erlang.nif_error(:not_loaded)
   end
@@ -1203,7 +1204,6 @@ defmodule GitRekt.Git do
     :erlang.nif_error(:not_loaded)
   end
 
-
   @doc """
   Inserts objects as given by the `walk`.
   """
@@ -1223,7 +1223,8 @@ defmodule GitRekt.Git do
   @doc """
   Adds a new working tree for the given `repo`
   """
-  @spec worktree_add(repo, binary, binary, binary | :undefined) :: {:ok, worktree} | {:error, term}
+  @spec worktree_add(repo, binary, binary, binary | :undefined) ::
+          {:ok, worktree} | {:error, term}
   def worktree_add(_repo, _name, _path, _ref) do
     :erlang.nif_error(:not_loaded)
   end
@@ -1240,11 +1241,13 @@ defmodule GitRekt.Git do
   # Helpers
   #
 
-  @spec reference_stream_next(ref_iter) :: {[{binary, ref_type, binary, binary}], ref_iter} | {:halt, ref_iter}
+  @spec reference_stream_next(ref_iter) ::
+          {[{binary, ref_type, binary, binary}], ref_iter} | {:halt, ref_iter}
   defp reference_stream_next(iter) do
     case reference_next(iter) do
       {:ok, name, type, shortname, target} ->
         {[{name, type, shortname, target}], iter}
+
       {:error, :iterover} ->
         {:halt, iter}
     end
@@ -1255,25 +1258,33 @@ defmodule GitRekt.Git do
     case revwalk_next(walk) do
       {:ok, oid} ->
         {[oid], walk}
+
       {:error, :iterover} ->
         {:halt, walk}
     end
   end
 
-  @spec commit_parent_stream_next({commit, non_neg_integer, non_neg_integer}) :: {:halt, {commit, non_neg_integer, non_neg_integer}} | {[{oid, commit}], {commit, non_neg_integer, non_neg_integer}}
+  @spec commit_parent_stream_next({commit, non_neg_integer, non_neg_integer}) ::
+          {:halt, {commit, non_neg_integer, non_neg_integer}}
+          | {[{oid, commit}], {commit, non_neg_integer, non_neg_integer}}
   defp commit_parent_stream_next({_commit, max, max} = iter), do: {:halt, iter}
+
   defp commit_parent_stream_next({commit, i, max}) do
     case commit_parent(commit, i) do
-      {:ok, oid, parent} -> {[{oid, parent}], {commit, i+1, max}}
+      {:ok, oid, parent} -> {[{oid, parent}], {commit, i + 1, max}}
     end
   end
 
-  @spec tree_stream_next({tree, non_neg_integer}) :: {[{integer, atom, oid, binary}], {tree, non_neg_integer}} | {:halt, {tree, non_neg_integer}}
+  @spec tree_stream_next({tree, non_neg_integer}) ::
+          {[{integer, atom, oid, binary}], {tree, non_neg_integer}}
+          | {:halt, {tree, non_neg_integer}}
   defp tree_stream_next(iter) do
     {tree, i} = iter
+
     case tree_nth(tree, i) do
       {:ok, mode, type, oid, path} ->
-        {[{mode, type, oid, path}], {tree, i+1}}
+        {[{mode, type, oid, path}], {tree, i + 1}}
+
       {:error, :enomem} ->
         {:halt, iter}
     end

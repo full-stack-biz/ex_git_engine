@@ -12,7 +12,7 @@ defmodule GitRekt.Cache do
   @doc """
   Initialize the cache for the given `path`.
   """
-  @callback init_cache(path :: Path.t, opts :: keyword) :: cache
+  @callback init_cache(path :: Path.t(), opts :: keyword) :: cache
 
   @doc """
   Fetches the value for a specific `cache_key`.
