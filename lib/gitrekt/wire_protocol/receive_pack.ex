@@ -121,7 +121,12 @@ defmodule GitRekt.WireProtocol.ReceivePack do
       else
         {:error, reason} ->
           error_msg = if is_binary(reason), do: reason, else: inspect(reason)
-          output = if "report-status" in handle.caps, do: ["unpack ng #{error_msg}", :flush], else: []
+          output = if "report-status" in handle.caps do
+            cmd_rejections = Enum.map(handle.cmds, &"ng #{elem(&1, :erlang.tuple_size(&1)-1)} #{error_msg}")
+            ["unpack #{error_msg}"] ++ cmd_rejections ++ [:flush]
+          else
+            []
+          end
           {handle, [], output}
       end
     else
