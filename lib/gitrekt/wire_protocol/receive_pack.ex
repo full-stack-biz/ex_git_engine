@@ -137,31 +137,43 @@ defmodule GitRekt.WireProtocol.ReceivePack do
   end
 
   def next(%__MODULE__{state: :done} = handle, []) do
-    if handle.cmds != [] do
-      with :ok <- push_pack(handle.agent, handle.writepack, handle.writepack_progress),
-           :ok <- GitRepo.pre_push(handle.repo, handle.cmds),
-           :ok <- push_cmds(handle.agent, handle.cmds),
-           {:ok, repo} <- GitRepo.push(handle.repo, handle.cmds) do
-        output = if "report-status" in handle.caps, do: report_status(handle), else: []
-        {%{handle | repo: repo, cmds: []}, [], output}
-      else
-        {:error, reason} ->
-          error_msg = if is_binary(reason), do: reason, else: inspect(reason)
-
-          output =
-            if "report-status" in handle.caps do
-              cmd_rejections =
-                Enum.map(handle.cmds, &"ng #{elem(&1, :erlang.tuple_size(&1) - 1)} #{error_msg}")
-
-              ["unpack #{error_msg}"] ++ cmd_rejections ++ [:flush]
-            else
-              []
-            end
-
-          {handle, [], output}
-      end
-    else
+    if handle.cmds == [] do
       {handle, [], []}
+    else
+      handle_push_cmds(handle)
+    end
+  end
+
+  defp handle_push_cmds(handle) do
+    with :ok <- push_pack(handle.agent, handle.writepack, handle.writepack_progress),
+         :ok <- GitRepo.pre_push(handle.repo, handle.cmds),
+         :ok <- push_cmds(handle.agent, handle.cmds),
+         {:ok, repo} <- GitRepo.push(handle.repo, handle.cmds) do
+      output = push_success_output(handle)
+      {%{handle | repo: repo, cmds: []}, [], output}
+    else
+      {:error, reason} ->
+        error_msg = format_error_reason(reason)
+        output = push_error_output(handle, error_msg)
+        {handle, [], output}
+    end
+  end
+
+  defp push_success_output(handle) do
+    if "report-status" in handle.caps, do: report_status(handle), else: []
+  end
+
+  defp format_error_reason(reason) when is_binary(reason), do: reason
+  defp format_error_reason(reason), do: inspect(reason)
+
+  defp push_error_output(handle, error_msg) do
+    if "report-status" in handle.caps do
+      cmd_rejections =
+        Enum.map(handle.cmds, &"ng #{elem(&1, :erlang.tuple_size(&1) - 1)} #{error_msg}")
+
+      ["unpack #{error_msg}"] ++ cmd_rejections ++ [:flush]
+    else
+      []
     end
   end
 

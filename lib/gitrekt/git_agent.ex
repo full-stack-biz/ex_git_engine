@@ -350,9 +350,9 @@ defmodule GitRekt.GitAgent do
     {exec_opts, opts} = pop_exec_opts(opts)
     {with_target, opts} = Keyword.pop(opts, :with)
 
-    unless with_target,
-      do: exec(agent, {:references, "refs/heads/*", opts}, exec_opts),
-      else: exec(agent, {:references_with, with_target, "refs/heads/*", opts}, exec_opts)
+    if with_target,
+      do: exec(agent, {:references_with, with_target, "refs/heads/*", opts}, exec_opts),
+      else: exec(agent, {:references, "refs/heads/*", opts}, exec_opts)
   end
 
   @doc """
@@ -363,9 +363,9 @@ defmodule GitRekt.GitAgent do
   def branch(agent, name, opts \\ []) do
     {with_target, opts} = Keyword.pop(opts, :with)
 
-    unless with_target,
-      do: exec(agent, {:reference, "refs/heads/" <> name, :undefined}, opts),
-      else: exec(agent, {:reference_with, with_target, "refs/heads/" <> name, :undefined}, opts)
+    if with_target,
+      do: exec(agent, {:reference_with, with_target, "refs/heads/" <> name, :undefined}, opts),
+      else: exec(agent, {:reference, "refs/heads/" <> name, :undefined}, opts)
   end
 
   @doc """
@@ -377,9 +377,9 @@ defmodule GitRekt.GitAgent do
     {with_target, opts} = Keyword.pop(opts, :with)
     opts = Keyword.put(opts, :target, :tag)
 
-    unless with_target,
-      do: exec(agent, {:references, "refs/tags/*", opts}, exec_opts),
-      else: exec(agent, {:references_with, with_target, "refs/tags/*", opts}, exec_opts)
+    if with_target,
+      do: exec(agent, {:references_with, with_target, "refs/tags/*", opts}, exec_opts),
+      else: exec(agent, {:references, "refs/tags/*", opts}, exec_opts)
   end
 
   @doc """
@@ -391,9 +391,9 @@ defmodule GitRekt.GitAgent do
   def tag(agent, name, opts \\ []) do
     {with_target, opts} = Keyword.pop(opts, :with)
 
-    unless with_target,
-      do: exec(agent, {:reference, "refs/tags/" <> name, :tag}, opts),
-      else: exec(agent, {:reference_with, with_target, "refs/tags/" <> name, :tag}, opts)
+    if with_target,
+      do: exec(agent, {:reference_with, with_target, "refs/tags/" <> name, :tag}, opts),
+      else: exec(agent, {:reference, "refs/tags/" <> name, :tag}, opts)
   end
 
   @doc """
@@ -417,9 +417,9 @@ defmodule GitRekt.GitAgent do
     {glob, opts} = Keyword.pop(opts, :glob, :undefined)
     {with_target, opts} = Keyword.pop(opts, :with)
 
-    unless with_target,
-      do: exec(agent, {:references, glob, opts}, exec_opts),
-      else: exec(agent, {:references_with, with_target, glob, opts}, exec_opts)
+    if with_target,
+      do: exec(agent, {:references_with, with_target, glob, opts}, exec_opts),
+      else: exec(agent, {:references, glob, opts}, exec_opts)
   end
 
   @doc """
@@ -430,9 +430,9 @@ defmodule GitRekt.GitAgent do
   def reference(agent, name, opts \\ []) do
     {with_target, opts} = Keyword.pop(opts, :with)
 
-    unless with_target,
-      do: exec(agent, {:reference, name, :undefined}, opts),
-      else: exec(agent, {:reference_with, with_target, name, :undefined}, opts)
+    if with_target,
+      do: exec(agent, {:reference_with, with_target, name, :undefined}, opts),
+      else: exec(agent, {:reference, name, :undefined}, opts)
   end
 
   @doc """
@@ -554,9 +554,9 @@ defmodule GitRekt.GitAgent do
   def tree_entry_by_id(agent, revision, oid, opts \\ []) do
     {with_target, opts} = Keyword.pop(opts, :with)
 
-    unless with_target,
-      do: exec(agent, {:tree_entry, revision, {:oid, oid}}, opts),
-      else: exec(agent, {:tree_entry_with, with_target, revision, {:oid, oid}}, opts)
+    if with_target,
+      do: exec(agent, {:tree_entry_with, with_target, revision, {:oid, oid}}, opts),
+      else: exec(agent, {:tree_entry, revision, {:oid, oid}}, opts)
   end
 
   @doc """
@@ -567,9 +567,9 @@ defmodule GitRekt.GitAgent do
   def tree_entry_by_path(agent, revision, path, opts \\ []) do
     {with_target, opts} = Keyword.pop(opts, :with)
 
-    unless with_target,
-      do: exec(agent, {:tree_entry, revision, {:path, path}}, opts),
-      else: exec(agent, {:tree_entry_with, with_target, revision, {:path, path}}, opts)
+    if with_target,
+      do: exec(agent, {:tree_entry_with, with_target, revision, {:path, path}}, opts),
+      else: exec(agent, {:tree_entry, revision, {:path, path}}, opts)
   end
 
   @doc """
@@ -582,9 +582,9 @@ defmodule GitRekt.GitAgent do
     {path, opts} = Keyword.pop(opts, :path, :root)
     {with_target, opts} = Keyword.pop(opts, :with)
 
-    unless with_target,
-      do: exec(agent, {:tree_entries, revision, path, opts}, exec_opts),
-      else: exec(agent, {:tree_entries_with, with_target, revision, path, opts}, exec_opts)
+    if with_target,
+      do: exec(agent, {:tree_entries_with, with_target, revision, path, opts}, exec_opts),
+      else: exec(agent, {:tree_entries, revision, path, opts}, exec_opts)
   end
 
   @doc """
@@ -1193,39 +1193,51 @@ defmodule GitRekt.GitAgent do
     cache_adapter =
       Keyword.get(Application.get_env(:gitrekt, __MODULE__, []), :cache_adapter, __MODULE__)
 
-    if cache_key = cache_adapter.make_cache_key(op) do
-      event_time = :os.system_time(:microsecond)
+    case cache_adapter.make_cache_key(op) do
+      cache_key when is_binary(cache_key) ->
+        call_with_cache(handle, op, cache, cache_key, cache_adapter, pid)
 
-      if cache_result = cache_adapter.fetch_cache(cache, cache_key) do
+      nil ->
+        telemetry(:execute, op, fn -> call(handle, op) end, %{pid: pid})
+    end
+  end
+
+  defp call_with_cache(handle, op, cache, cache_key, cache_adapter, pid) do
+    event_time = :os.system_time(:microsecond)
+
+    case cache_adapter.fetch_cache(cache, cache_key) do
+      result when result != nil ->
         telemetry(:execute, op, %{duration: :os.system_time(:microsecond) - event_time}, %{
           cache: cache_key,
           pid: pid
         })
 
-        {:ok, cache_result}
-      else
-        case call(handle, op) do
-          :ok ->
-            telemetry(:execute, op, %{duration: :os.system_time(:microsecond) - event_time}, %{
-              pid: pid
-            })
+        {:ok, result}
 
-            :ok
+      nil ->
+        handle_cache_miss(handle, op, cache, cache_key, cache_adapter, event_time, pid)
+    end
+  end
 
-          {:ok, result} ->
-            telemetry(:execute, op, %{duration: :os.system_time(:microsecond) - event_time}, %{
-              pid: pid
-            })
+  defp handle_cache_miss(handle, op, cache, cache_key, cache_adapter, event_time, pid) do
+    case call(handle, op) do
+      :ok ->
+        telemetry(:execute, op, %{duration: :os.system_time(:microsecond) - event_time}, %{
+          pid: pid
+        })
 
-            cache_adapter.put_cache(cache, cache_key, result)
-            {:ok, result}
+        :ok
 
-          {:error, reason} ->
-            {:error, reason}
-        end
-      end
-    else
-      telemetry(:execute, op, fn -> call(handle, op) end, %{pid: pid})
+      {:ok, result} ->
+        telemetry(:execute, op, %{duration: :os.system_time(:microsecond) - event_time}, %{
+          pid: pid
+        })
+
+        cache_adapter.put_cache(cache, cache_key, result)
+        {:ok, result}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -1233,20 +1245,19 @@ defmodule GitRekt.GitAgent do
     telemetry(
       :execute,
       op,
-      fn ->
-        case call(handle, op) do
-          {:ok, stream} ->
-            if chunk_size == :infinity,
-              do: {:ok, Enum.to_list(stream)},
-              else: {:ok, async_stream(op, stream, chunk_size, pid)}
-
-          {:error, reason} ->
-            {:error, reason}
-        end
-      end,
+      fn -> process_stream_call(call(handle, op), chunk_size, op, pid) end,
       %{stream_chunk_size: chunk_size, pid: pid}
     )
   end
+
+  defp process_stream_call({:ok, stream}, :infinity, _op, _pid),
+    do: {:ok, Enum.to_list(stream)}
+
+  defp process_stream_call({:ok, stream}, chunk_size, op, pid),
+    do: {:ok, async_stream(op, stream, chunk_size, pid)}
+
+  defp process_stream_call({:error, reason}, _chunk_size, _op, _pid),
+    do: {:error, reason}
 
   defp call_stream_next(op, stream, :infinity, pid) do
     event_time = :os.system_time(:microsecond)
@@ -1769,26 +1780,24 @@ defmodule GitRekt.GitAgent do
     agent = self()
 
     GitStream.transform(stream, fn
-      :halt ->
-        {:halt, stream}
-
-      stream ->
-        if agent == self(),
-          do: call_stream_next(op, stream, chunk_size, pid),
-          else:
-            telemetry(
-              :call_stream,
-              op,
-              fn ->
-                GenServer.call(
-                  agent,
-                  {:stream_next, op, stream, chunk_size},
-                  @default_config.timeout
-                )
-              end,
-              %{stream_chunk_size: chunk_size, pid: agent}
-            )
+      :halt -> {:halt, stream}
+      s -> async_stream_next(agent, op, s, stream, chunk_size, pid)
     end)
+  end
+
+  defp async_stream_next(agent, op, stream, _original, chunk_size, pid) when agent == self() do
+    call_stream_next(op, stream, chunk_size, pid)
+  end
+
+  defp async_stream_next(agent, op, stream, _original, chunk_size, _pid) do
+    telemetry(
+      :call_stream,
+      op,
+      fn ->
+        GenServer.call(agent, {:stream_next, op, stream, chunk_size}, @default_config.timeout)
+      end,
+      %{stream_chunk_size: chunk_size, pid: agent}
+    )
   end
 
   defp map_operation(op) when is_atom(op), do: {op, []}
