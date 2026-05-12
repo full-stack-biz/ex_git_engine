@@ -117,7 +117,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
             :ok <- push_cmds(handle.agent, handle.cmds),
            {:ok, repo} <- GitRepo.push(handle.repo, handle.cmds) do
         output = if "report-status" in handle.caps, do: report_status(handle), else: []
-        {%{handle|repo: repo}, [], output}
+        {%{handle|repo: repo, cmds: []}, [], output}
       else
         {:error, reason} ->
           error_msg = if is_binary(reason), do: reason, else: inspect(reason)
@@ -135,10 +135,10 @@ defmodule GitRekt.WireProtocol.ReceivePack do
   end
 
   @impl true
-  def skip(%__MODULE__{state: :disco, caps: caps, advertised_caps: advertised_caps} = handle) do
-    new_advertised = if advertised_caps == [] and caps != [], do: caps, else: advertised_caps
-    Logger.debug("SKIP disco->update_req: caps=#{inspect(caps)}, advertised_caps=#{inspect(advertised_caps)}, preserving=#{inspect(new_advertised)}")
-    %{handle|state: :update_req, advertised_caps: new_advertised}
+  def skip(%__MODULE__{state: :disco, caps: caps} = handle) do
+    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ caps
+    Logger.debug("SKIP disco->update_req: caps=#{inspect(caps)}, advertised_caps=#{inspect(advertised)}")
+    %{handle|state: :update_req, advertised_caps: advertised}
   end
   def skip(%__MODULE__{state: :update_req, caps: caps} = handle) do
     Logger.debug("SKIP update_req->pack: caps=#{inspect(caps)}")
