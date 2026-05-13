@@ -529,4 +529,74 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
       assert output2 == []
     end
   end
+
+  describe "advisory messages" do
+    test "format_advisories/1 encodes each advisory as PKT-LINE" do
+      advisories = ["Deployment successful"]
+      result = ReceivePack.format_advisories(advisories)
+
+      assert length(result) == 1
+      encoded = List.first(result)
+      assert is_binary(encoded)
+      assert String.contains?(encoded, "Deployment successful")
+    end
+
+    test "format_advisories/1 with empty list returns empty list" do
+      result = ReceivePack.format_advisories([])
+      assert result == []
+    end
+
+    test "format_advisories/1 encodes multiple advisories" do
+      advisories = ["First message", "Second message", "Third message"]
+      result = ReceivePack.format_advisories(advisories)
+
+      assert length(result) == 3
+      assert Enum.any?(result, &String.contains?(&1, "First message"))
+      assert Enum.any?(result, &String.contains?(&1, "Second message"))
+      assert Enum.any?(result, &String.contains?(&1, "Third message"))
+    end
+
+    test "format_advisories/1 each line ends with newline for PKT-LINE compliance" do
+      advisories = ["Test message"]
+      result = ReceivePack.format_advisories(advisories)
+
+      encoded = List.first(result)
+      assert String.ends_with?(encoded, "\n")
+    end
+
+    test "advisory messages inserted before flush in report-status output" do
+      handle = %ReceivePack{
+        caps: ["report-status"],
+        cmds: [
+          {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"}
+        ]
+      }
+
+      base_output = ReceivePack.report_status(handle)
+      advisories = ["Build passed"]
+      advisory_output = ReceivePack.format_advisories(advisories)
+
+      # Protocol spec: advisories come after status lines but before final flush
+      # So we insert advisories before the :flush marker
+      combined =
+        base_output
+        |> Enum.split_while(&(&1 != :flush))
+        |> then(fn {status_lines, [_flush]} -> status_lines ++ advisory_output ++ [:flush] end)
+
+      # Verify order: status comes before advisory
+      unpack_idx = Enum.find_index(combined, &(&1 == "unpack ok"))
+
+      advisory_idx =
+        Enum.find_index(combined, fn item ->
+          is_binary(item) && String.contains?(item, "Build passed")
+        end)
+
+      assert unpack_idx != nil
+      assert advisory_idx != nil
+      assert advisory_idx > unpack_idx
+
+      # Flush is last
+      assert List.last(combined) == :flush
+    end
+  end
 end

@@ -26,9 +26,11 @@ defprotocol GitRekt.GitRepo do
 
   @doc """
   Executes after refs have been updated (post-push hook).
+  Can optionally return advisory messages to send to the client.
+  Returns {:ok, repo} or {:ok, repo, advisories :: [binary]} or {:error, term}
   """
   @fallback_to_any true
-  @spec push(t, [ReceivePack.cmd()]) :: {:ok, t} | {:error, term}
+  @spec push(t, [ReceivePack.cmd()]) :: {:ok, t} | {:ok, t, [binary]} | {:error, term}
   def push(repo, cmds)
 end
 

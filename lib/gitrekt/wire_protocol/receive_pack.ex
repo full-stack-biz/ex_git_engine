@@ -154,9 +154,21 @@ defmodule GitRekt.WireProtocol.ReceivePack do
     with :ok <- push_pack(handle.agent, handle.writepack, handle.writepack_progress),
          :ok <- GitRepo.pre_push(handle.repo, handle.cmds),
          :ok <- push_cmds(handle.agent, handle.cmds),
-         {:ok, repo} <- GitRepo.push(handle.repo, handle.cmds) do
-      output = push_success_output(handle)
-      {%{handle | repo: repo, cmds: []}, [], output}
+         result <- GitRepo.push(handle.repo, handle.cmds) do
+      case result do
+        {:ok, repo} ->
+          output = push_success_output(handle)
+          {%{handle | repo: repo, cmds: []}, [], output}
+
+        {:ok, repo, advisories} ->
+          output = push_success_output(handle) ++ format_advisories(advisories)
+          {%{handle | repo: repo, cmds: []}, [], output}
+
+        {:error, reason} ->
+          error_msg = format_error_reason(reason)
+          output = push_error_output(handle, error_msg)
+          {handle, [], output}
+      end
     else
       {:error, reason} ->
         error_msg = format_error_reason(reason)
@@ -288,5 +300,10 @@ defmodule GitRekt.WireProtocol.ReceivePack do
       :ok -> :ok
       {:error, reason} -> raise reason
     end
+  end
+
+  @doc false
+  def format_advisories(advisories) do
+    Enum.map(advisories, &GitRekt.WireProtocol.pkt_line/1)
   end
 end
