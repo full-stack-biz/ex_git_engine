@@ -31,14 +31,14 @@ defmodule GitRekt.WireProtocol.UploadPack do
 
   @impl true
   def next(%__MODULE__{state: :disco} = handle, [:flush | lines]) do
-    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
+    advertised = GitRekt.WireProtocol.server_capabilities(@service_name)
 
     {%{handle | state: :done, caps: [], advertised_caps: advertised}, lines,
      reference_discovery(handle.agent, @service_name, handle.caps)}
   end
 
   def next(%__MODULE__{state: :disco} = handle, lines) do
-    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
+    advertised = GitRekt.WireProtocol.server_capabilities(@service_name)
 
     {%{handle | state: :upload_req, caps: [], advertised_caps: advertised}, lines,
      reference_discovery(handle.agent, @service_name, handle.caps)}
@@ -127,7 +127,7 @@ defmodule GitRekt.WireProtocol.UploadPack do
 
   @impl true
   def skip(%__MODULE__{state: :disco} = handle) do
-    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
+    advertised = GitRekt.WireProtocol.server_capabilities(@service_name)
     %{handle | state: :upload_req, caps: [], advertised_caps: advertised}
   end
 

@@ -19,7 +19,7 @@ defmodule GitRekt.WireProtocol do
   alias GitRekt.GitRef
 
   @upload_caps ~w(multi_ack multi_ack_detailed)
-  @receive_caps ~w(report-status delete-refs ofs-delta atomic)
+  @receive_caps ~w(report-status delete-refs ofs-delta atomic side-band-64k)
 
   @doc """
   Callback used to transist a service to the next step.
@@ -34,9 +34,15 @@ defmodule GitRekt.WireProtocol do
   @doc """
   Returns an *PKT-LINE* encoded representation of the given `lines`.
   """
-  @spec encode(Enumerable.t()) :: iolist
-  def encode(lines) do
-    Enum.map(lines, &pkt_line/1)
+  @spec encode(Enumerable.t(), list) :: iolist
+  def encode(lines, caps \\ []) do
+    require Logger
+    lines_list = Enum.to_list(lines)
+    Logger.debug("ENCODE: input lines=#{inspect(lines_list)}")
+    encoded = Enum.map(lines_list, fn line -> pkt_line(line, caps) end)
+    binary_encoded = IO.iodata_to_binary(encoded)
+    Logger.debug("ENCODE: hex output=#{Base.encode16(binary_encoded)}")
+    encoded
   end
 
   @doc """
@@ -63,7 +69,7 @@ defmodule GitRekt.WireProtocol do
 
   def next(service, :discovery) do
     {service, lines} = exec_next(service, [])
-    {service, encode(lines)}
+    {service, encode(lines, service.caps)}
   end
 
   def next(service, data) do
@@ -126,22 +132,49 @@ defmodule GitRekt.WireProtocol do
   """
   @spec pkt_line(:flush | {:ack, Git.oid()} | {:ack, Git.oid(), binary} | :nak | binary) :: binary
   def pkt_line(data \\ :flush)
+
   def pkt_line(:flush), do: "0000"
+
+  def pkt_line({:sideband_report, channel, inner}) do
+    data = IO.iodata_to_binary(Enum.map(inner, &pkt_line/1))
+    size = byte_size(data) + 5
+    hex_size = size |> Integer.to_string(16) |> String.downcase() |> String.pad_leading(4, "0")
+    hex_size <> <<channel>> <> data
+  end
+
   def pkt_line({:ack, oid}), do: pkt_line("ACK #{Git.oid_fmt(oid)}")
   def pkt_line({:ack, oid, status}), do: pkt_line("ACK #{Git.oid_fmt(oid)} #{status}")
   def pkt_line(:nak), do: pkt_line("NAK")
+  def pkt_line({:unpack, status}), do: pkt_line("unpack #{status}")
+  def pkt_line({:ok, refname}), do: pkt_line("ok #{refname}")
+  def pkt_line({:ng, refname, reason}), do: pkt_line("ng #{refname} #{reason}")
+
+  def pkt_line({:sideband, channel, text}),
+    do: GitRekt.WireProtocol.ReceivePack.sideband_wrap(text, channel)
+
   def pkt_line(<<"PACK", _rest::binary>> = pack), do: pack
 
-  def pkt_line(data) when is_binary(data) do
-    data
-    |> byte_size()
-    |> Kernel.+(5)
-    |> Integer.to_string(16)
-    |> String.downcase()
-    |> String.pad_leading(4, "0")
-    |> Kernel.<>(data)
-    |> Kernel.<>("\n")
-  end
+  def pkt_line(data) when is_binary(data),
+    do:
+      String.pad_leading(Integer.to_string(byte_size(data) + 5, 16) |> String.downcase(), 4, "0") <>
+        data <> "\n"
+
+  def pkt_line({:unpack, status}, _caps), do: pkt_line("unpack #{status}")
+  def pkt_line({:ok, refname}, _caps), do: pkt_line("ok #{refname}")
+  def pkt_line({:ng, refname, reason}, _caps), do: pkt_line("ng #{refname} #{reason}")
+
+  def pkt_line({:sideband_report, channel, inner}, _caps),
+    do: pkt_line({:sideband_report, channel, inner})
+
+  def pkt_line({:sideband, channel, text}, _caps),
+    do: GitRekt.WireProtocol.ReceivePack.sideband_wrap(text, channel)
+
+  def pkt_line(:flush, _caps), do: "0000"
+
+  def pkt_line(data, _caps) when is_binary(data),
+    do:
+      String.pad_leading(Integer.to_string(byte_size(data) + 5, 16) |> String.downcase(), 4, "0") <>
+        data <> "\n"
 
   @doc false
   def __type__(%{__struct__: GitRekt.WireProtocol.UploadPack}), do: :upload_pack
@@ -186,9 +219,9 @@ defmodule GitRekt.WireProtocol do
   defp exec_after(service, lines) do
     if service.state == :done do
       {service, lines} = exec_next(service, [], lines)
-      {:halt, service, encode(lines)}
+      {:halt, service, encode(lines, service.caps)}
     else
-      {:cont, service, encode(lines)}
+      {:cont, service, encode(lines, service.caps)}
     end
   end
 

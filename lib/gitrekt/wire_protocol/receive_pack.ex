@@ -62,7 +62,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
   end
 
   def next(%__MODULE__{state: :disco} = handle, lines) do
-    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
+    advertised = GitRekt.WireProtocol.server_capabilities(@service_name)
     Logger.debug("RECEIVE_PACK disco->update_req: advertised_caps=#{inspect(advertised)}")
 
     {%{handle | state: :update_req, advertised_caps: advertised}, lines,
@@ -157,39 +157,81 @@ defmodule GitRekt.WireProtocol.ReceivePack do
          result <- GitRepo.push(handle.repo, handle.cmds) do
       case result do
         {:ok, repo} ->
-          output = push_success_output(handle)
+          output = push_success_output(handle) ++ [:flush]
+          Logger.debug("HANDLE_PUSH_CMDS: no messages, output=#{inspect(output)}")
           {%{handle | repo: repo, cmds: []}, [], output}
 
-        {:ok, repo, advisories} ->
-          output = push_success_output(handle) ++ format_advisories(advisories)
+        {:ok, repo, messages} ->
+          output = build_push_response(handle, messages)
+          Logger.debug("HANDLE_PUSH_CMDS: combined output=#{inspect(output)}")
           {%{handle | repo: repo, cmds: []}, [], output}
 
         {:error, reason} ->
           error_msg = format_error_reason(reason)
-          output = push_error_output(handle, error_msg)
+          output = push_error_output(handle, error_msg) ++ [:flush]
           {handle, [], output}
       end
     else
       {:error, reason} ->
         error_msg = format_error_reason(reason)
-        output = push_error_output(handle, error_msg)
+        output = push_error_output(handle, error_msg) ++ [:flush]
         {handle, [], output}
     end
   end
 
-  defp push_success_output(handle) do
-    if "report-status" in handle.caps, do: report_status(handle), else: []
+  @doc false
+  def push_success_output(handle) do
+    if "report-status" in handle.advertised_caps do
+      report = report_status(handle)
+
+      if "side-band-64k" in handle.caps do
+        [{:sideband_report, 1, report ++ [:flush]}]
+      else
+        report
+      end
+    else
+      []
+    end
+  end
+
+  @doc false
+  def build_push_response(handle, messages) do
+    status_output = push_success_output(handle)
+
+    if "side-band-64k" in handle.caps do
+      hook_output = Enum.map(messages, fn msg -> {:sideband, 2, msg} end)
+      status_output ++ hook_output ++ [:flush]
+    else
+      status_output ++ messages ++ [:flush]
+    end
+  end
+
+  @doc false
+  def sideband_wrap(line, band) when is_binary(line) do
+    data = line <> "\n"
+    size = byte_size(data) + 5
+    hex_size = size |> Integer.to_string(16) |> String.downcase() |> String.pad_leading(4, "0")
+    hex_size <> <<band>> <> data
   end
 
   defp format_error_reason(reason) when is_binary(reason), do: reason
   defp format_error_reason(reason), do: inspect(reason)
 
   defp push_error_output(handle, error_msg) do
-    if "report-status" in handle.caps do
+    if "report-status" in handle.advertised_caps do
       cmd_rejections =
-        Enum.map(handle.cmds, &"ng #{elem(&1, :erlang.tuple_size(&1) - 1)} #{error_msg}")
+        Enum.map(handle.cmds, fn cmd ->
+          refname = elem(cmd, :erlang.tuple_size(cmd) - 1)
+          {:ng, refname, error_msg}
+        end)
 
-      ["unpack #{error_msg}"] ++ cmd_rejections ++ [:flush]
+      report = [{:unpack, error_msg}] ++ cmd_rejections
+
+      if "side-band-64k" in handle.caps do
+        [{:sideband_report, 1, report ++ [:flush]}]
+      else
+        report
+      end
     else
       []
     end
@@ -197,7 +239,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
 
   @impl true
   def skip(%__MODULE__{state: :disco, caps: caps} = handle) do
-    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ caps
+    advertised = GitRekt.WireProtocol.server_capabilities(@service_name)
 
     Logger.debug(
       "SKIP disco->update_req: caps=#{inspect(caps)}, advertised_caps=#{inspect(advertised)}"
@@ -250,16 +292,13 @@ defmodule GitRekt.WireProtocol.ReceivePack do
 
   @doc false
   def report_status(%__MODULE__{caps: _caps, cmds: cmds}) do
-    require Logger
-    cmd_statuses = Enum.map(cmds, &"ok #{elem(&1, :erlang.tuple_size(&1) - 1)}")
-    result = ["unpack ok"] ++ cmd_statuses ++ [:flush]
-    Logger.debug("REPORT_STATUS raw lines: #{inspect(result)}")
-    encoded = GitRekt.WireProtocol.encode(result)
-    Logger.debug("REPORT_STATUS encoded: #{inspect(encoded)}")
-    encoded_binary = IO.iodata_to_binary(encoded)
-    Logger.debug("REPORT_STATUS binary hex: #{Base.encode16(encoded_binary)}")
-    Logger.debug("REPORT_STATUS result returning: #{inspect(result)}")
-    result
+    ref_statuses =
+      Enum.map(cmds, fn cmd ->
+        refname = elem(cmd, :erlang.tuple_size(cmd) - 1)
+        {:ok, refname}
+      end)
+
+    [{:unpack, "ok"} | ref_statuses]
   end
 
   defp push_pack(_agent, _writepack, progress) when progress.received_bytes == 0, do: :ok
@@ -300,10 +339,5 @@ defmodule GitRekt.WireProtocol.ReceivePack do
       :ok -> :ok
       {:error, reason} -> raise reason
     end
-  end
-
-  @doc false
-  def format_advisories(advisories) do
-    Enum.map(advisories, &GitRekt.WireProtocol.pkt_line/1)
   end
 end

@@ -60,11 +60,19 @@ The Makefile handles C compilation of the libgit2 wrapper NIF. The `elixir_make`
 - Acts as a finite-state machine: processes incoming requests, dispatches to services, returns encoded responses
 - Two main services: `ReceivePack` (git push) and `UploadPack` (git fetch/pull)
 - PKT-LINE encoding/decoding for protocol messages
+- All protocol responses are unified as tuples: `{:unpack, status}`, `{:ok, refname}`, `{:ng, refname, reason}`, `{:sideband, channel, text}`, `{:flush}`
+- These tuples flow through `encode/1` exactly once at the end of the pipeline
 
 **`GitRekt.WireProtocol.ReceivePack`** - Handles `git push` requests
 - Receives refs to update and objects from client
 - Unpacks objects into ODB, validates refs, updates refs, notifies hooks
 - Calls `GitRepo.pre_push/2` before updating refs, then `GitRepo.push/2` after
+- Supports `report-status` capability for push response status messages
+- Supports `side-band-64k` capability for multiplexed responses (status on channel 1, hook output on channel 2)
+- Response builders:
+  - `push_success_output/1` - Builds status tuples, optionally wraps with sideband if advertised
+  - `build_push_response/2` - Combines status and hook messages with final flush
+  - `sideband_wrap/2` - Wraps text with PKT-LINE sideband framing (4-byte hex size + channel byte + data + newline)
 
 **`GitRekt.WireProtocol.UploadPack`** - Handles `git fetch`/`git pull` requests
 - Advertises refs and capabilities to client
@@ -93,6 +101,7 @@ All defined in `GitRekt` module as structs with inspect impls:
 - **Protocol Extensibility**: `GitRepo` protocol allows custom implementations (e.g., custom push validation or post-push hooks)
 - **Message Passing**: `GitAgent` uses GenServer to serialize concurrent access to a single repository
 - **Lazy Evaluation**: Many operations return streams rather than materializing full results
+- **Single Encoding Point**: Wire protocol responses use unified tuple format that flows through `WireProtocol.encode/1` exactly once. Avoid pre-encoding, decoding, or re-encoding. Build the response structure as tuples, let encode handle all PKT-LINE framing.
 
 ## Common Workflows
 
@@ -121,6 +130,34 @@ end
 {:ok, commit} = GitRekt.GitAgent.peel(agent, ref)
 {:ok, message} = GitRekt.GitAgent.commit_message(agent, commit)
 ```
+
+### Testing Wire Protocol Features
+
+Wire protocol logic is best tested with TDD using pattern matching on exact tuple structures:
+
+```elixir
+# Build response with unified tuple format
+response = ReceivePack.push_success_output(handle)
+
+# Assert exact structure, not just presence
+assert [{:unpack, "ok"}, {:ok, "refs/heads/main"}] = response
+
+# For sideband-wrapped responses
+response_with_sideband = ReceivePack.push_success_output(%{handle | advertised_caps: ["side-band-64k", "report-status"]})
+
+# Verify channel 1 wrapping for status messages
+assert [
+  {:sideband, 1, "unpack ok"},
+  {:sideband, 1, "ok refs/heads/main"}
+] = response_with_sideband
+```
+
+**Key patterns:**
+- `report_status/1` returns status tuples without sideband wrapping
+- `push_success_output/1` optionally wraps tuples with sideband if `"side-band-64k"` is in `advertised_caps` (not `caps`)
+- `build_push_response/2` combines status (channel 1) and hook messages (channel 2) with final `{:flush}`
+- All response tuples flow through `WireProtocol.encode/1` exactly once for PKT-LINE framing
+- Use exact pattern matching in tests, not `Enum.any?` or loose assertions
 
 ## Git Protocol Debugging
 

@@ -8,6 +8,19 @@ Sources:
 
 **Core wire protocol:** See `git_protocol_wire.md` for pkt-line format, capability negotiation, push/fetch flows.
 
+## Table of Contents
+
+- [HTTP Smart Protocol Overview](#http-smart-protocol-overview)
+- [Reference Discovery (GET /info/refs)](#reference-discovery-get-inforefs)
+- [Push Request (POST /git-receive-pack)](#push-request-post-git-receive-pack)
+- [Fetch Request (GET /info/refs + POST/GET body)](#fetch-request-get-inforefs--postget-body)
+- [HTTP Authentication](#http-authentication)
+- [HTTP Smart Protocol vs Dumb Protocol](#http-smart-protocol-vs-dumb-protocol)
+- [Common HTTP Issues](#common-http-issues)
+- [HTTP Redirects](#http-redirects)
+- [Protocol Version Negotiation](#protocol-version-negotiation)
+- [GitRekt HTTP Transport Implementation](#gitrekt-http-transport-implementation)
+
 ---
 
 ## HTTP Smart Protocol Overview
@@ -55,23 +68,49 @@ Pragma: no-cache
 [Pkt-line wire protocol response]
 ```
 
-Content:
+**Smart Server Response Format** (from official spec):
 ```
-PKT-LINE("# service=git-receive-pack")
-flush-pkt
-[Reference discovery pkt-lines]
-[Capability list on first ref]
-flush-pkt
+smart_reply     = PKT-LINE("# service=$servicename" LF)
+                  "0000"
+                  *1("version 1")
+                  ref_list
+                  "0000"
+
+ref_list        = empty_list / non_empty_list
+
+empty_list      = PKT-LINE(zero-id SP "capabilities^{}" NUL cap-list LF)
+
+non_empty_list  = PKT-LINE(obj-id SP name NUL cap_list LF)
+                  *ref_record
+
+cap-list        = capability *(SP capability)
+
+ref_record      = any_ref / peeled_ref
+any_ref         = PKT-LINE(obj-id SP name LF)
+peeled_ref      = PKT-LINE(obj-id SP name LF)
+                  PKT-LINE(obj-id SP name "^{}" LF)
 ```
 
-Example:
+**Example**:
 ```
-# service=git-receive-pack
+001e# service=git-receive-pack
+0000
 0062 74730d410fcb6603ace96f1dc55ea6196122532d refs/heads/local\0report-status delete-refs ofs-delta
 003e 7d1665144a3a975c05f1f43902ddaf084e784dbe refs/heads/debug
 003f 74730d410fcb6603ace96f1dc55ea6196122532d refs/heads/master
+003d 74730d410fcb6603ace96f1dc55ea6196122532d refs/heads/team
 0000
 ```
+
+**Rules from spec**:
+- First line MUST be `# service=$servicename` 
+- Followed by flush-pkt (0000)
+- Then ref list pkt-lines
+- Ref list MUST be sorted by name (C locale)
+- Ref list SHOULD include HEAD as first ref
+- First ref line MUST include capability declarations (NUL-separated)
+- Subsequent ref lines have no capabilities
+- Response terminated with flush-pkt (0000)
 
 ### Critical Headers
 
@@ -97,14 +136,28 @@ Content-Length: [length of body]
 [Pkt-line wire protocol request + packfile]
 ```
 
-Body contents (wire protocol):
+**Command Format** (from official spec):
 ```
-[Push commands with capabilities on first line]
-flush-pkt
-[Packfile data]
+command_list    = PKT-LINE(command NUL cap_list LF)
+                  *(command_pkt)
+command_pkt     = PKT-LINE(command LF)
+cap_list        = *(SP capability) SP
+
+command         = create / delete / update
+create          = zero-id SP new_id SP name
+delete          = old_id SP zero-id SP name
+update          = old_id SP new_id SP name
 ```
 
-Example:
+**Body Structure**:
+```
+[First command line with NUL-separated capabilities]
+[Additional command lines without capabilities]
+flush-pkt
+[Packfile data (PACK header + objects)]
+```
+
+**Example**:
 ```
 0067 7d1665144a3a975c05f1f43902ddaf084e784dbe 74730d410fcb6603ace96f1dc55ea6196122532d refs/heads/debug\0report-status
 0068 74730d410fcb6603ace96f1dc55ea6196122532d 5a3f6be755bbb7deae50065988cbfa1ffa9ab68a refs/heads/master
@@ -112,34 +165,66 @@ Example:
 [PACKDATA]
 ```
 
+**Rules from spec**:
+- Clients MUST send at least one command in request body
+- Within command portion, clients SHOULD send the id obtained through ref discovery as old_id
+- First command line MUST include capability list (NUL-separated from refname)
+- Subsequent command lines have no capabilities (just NUL and LF)
+
 ### Response
 
 ```
 HTTP/1.1 200 OK
 Content-Type: application/x-git-receive-pack-result
+Cache-Control: no-cache
 
 [Report-status pkt-lines, if client requested]
 ```
 
-Response body (if client sent `report-status` capability):
+**Report-Status Format** (from official spec):
 ```
-0009 unpack ok
-0018 ok refs/heads/debug
+report-status     = unpack-status
+                    1*(command-status)
+                    flush-pkt
+
+unpack-status     = PKT-LINE("unpack" SP unpack-result)
+unpack-result     = "ok" / error-msg
+
+command-status    = command-ok / command-fail
+command-ok        = PKT-LINE("ok" SP refname)
+command-fail      = PKT-LINE("ng" SP refname SP error-msg)
+
+error-msg         = 1*(OCTET) ; where not "ok"
+```
+
+**Example Response** (if client sent `report-status`):
+```
+000eunpack ok
+0018ok refs/heads/debug
+0024ng refs/heads/master non-fast-forward
 0000
 ```
 
-Response body (if client did NOT send `report-status`):
+**Example Response** (if client did NOT send `report-status`):
 ```
-[Empty response, no pkt-lines]
+[Empty response, no pkt-lines, no content]
 ```
+
+**Important Rules from spec**:
+- **report-status ONLY if requested**: Server MUST NOT send report-status unless client explicitly requested it (client sent capability in command)
+- **Unpack status first**: Response MUST start with "unpack ok" or "unpack [error]"
+- **One line per ref**: One "ok [refname]" or "ng [refname] [error]" per updated ref
+- **Flush-pkt terminator**: Response MUST end with flush-pkt (0000)
+- **No pkt-lines on no report-status**: If client didn't request report-status, server sends zero bytes (not even a flush-pkt)
 
 ### Important Notes
 
 - **HTTP method**: MUST be POST (not PUT, not PATCH)
 - **Content-Type**: MUST be `application/x-git-receive-pack-request`
 - **Response Content-Type**: MUST be `application/x-git-receive-pack-result`
-- **Empty response on no report-status**: Server sends no pkt-lines if client didn't request it (not even a flush-pkt)
+- **Cache-Control**: Response SHOULD include Cache-Control headers
 - **Status code**: Always 200, even if push failed (failures reported via pkt-line, not HTTP status)
+- **Empty response on no report-status**: Server sends no pkt-lines if client didn't request it (not even a flush-pkt)
 
 ---
 

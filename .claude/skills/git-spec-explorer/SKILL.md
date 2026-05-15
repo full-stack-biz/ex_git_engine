@@ -3,12 +3,14 @@ name: git-spec-explorer
 description: >-
   Explore and collect details from Git specifications to ensure protocol conformity.
   Use when implementing Git wire protocol features, validating capability negotiation,
-  or debugging push/fetch protocol issues. Searches official Git specs, fetches protocol
-  documentation, and references gitrekt's collected protocol knowledge.
+  or debugging push/fetch protocol issues. Extracts authoritative specs from Git man pages
+  (man gitprotocol-v2, man gitprotocol-pack, etc.), updates protocol reference files,
+  and references gitrekt's protocol knowledge base.
 allowed-tools:
-  - WebSearch
-  - mcp__mcp-server-fetch__fetch
+  - Bash
+  - Skill
   - Read
+  - Edit
 ---
 
 # Git Spec Explorer
@@ -28,7 +30,7 @@ Examples:
 - /git-spec-explorer push protocol receive-pack flow
 ```
 
-This searches official Git specs, fetches detailed documentation, and references gitrekt's protocol knowledge base. Returns findings organized by specification source and relevance to implementation.
+This collects protocol details from Git's official man pages (`man gitprotocol-v2`, `man gitprotocol-pack`, etc.), references gitrekt's protocol knowledge base, and updates documentation with findings. Returns authoritative specifications with implementation guidance.
 
 ## NIF-First Design Principle
 
@@ -85,9 +87,11 @@ This searches official Git specs, fetches detailed documentation, and references
 **Goal:** Find specific information from Git specs to answer implementation questions.
 
 **Process:**
-1. **Search official specs** → WebSearch across git-scm.com documentation and technical specs
-2. **Fetch detailed sections** → WebFetch specific protocol docs for full context
-3. **Cross-reference local** → Reference local protocol documentation for implementation details
+1. **Fetch from man pages (PRIMARY)** → `man gitprotocol-v2`, `man gitprotocol-pack`, `man gitprotocol-capabilities`, `man gitprotocol-http`
+   - Extract clean text: `man <page> 2>/dev/null | col -b > /tmp/<page>.txt`
+   - Man pages are authoritative, always available locally, need no network
+2. **Cross-reference local** → Reference local protocol documentation for implementation details
+3. **Update skill references** → When man page reveals new or corrected details, update corresponding .md file
 4. **Organize findings** → Group by: spec source, protocol phase, implementation requirement
 
 **Example queries:**
@@ -117,11 +121,18 @@ Gaps: [anything missing or unclear]
 
 ## Key Specs to Know
 
-**Primary Sources:**
-- https://git-scm.com/docs/gitprotocol-pack — Wire protocol (capabilities, pkt-line, push/fetch sequences)
-- https://git-scm.com/docs/gitprotocol-capabilities — Capability negotiation and advertising
-- https://git-scm.com/docs/gitprotocol-http — HTTP smart protocol specifics
-- https://git-scm.com/book/en/v2/Git-Internals-Transfer-Protocols — Protocol overview (covers both HTTP and SSH)
+**Primary Sources (Man Pages - Always Available Locally):**
+- `man gitprotocol-v2` — Git Wire Protocol Version 2 (comprehensive, latest standard)
+- `man gitprotocol-pack` — Wire protocol v1 and negotiation details
+- `man gitprotocol-capabilities` — Capability advertising and negotiation
+- `man gitprotocol-http` — HTTP smart protocol specifics
+- `man gitprotocol-common` — Common protocol details shared across versions
+
+**Alternative Sources (if man pages unavailable):**
+- https://git-scm.com/docs/gitprotocol-v2 — Web version of v2 spec
+- https://git-scm.com/docs/gitprotocol-pack — Web version of pack protocol
+- https://git-scm.com/docs/gitprotocol-capabilities — Web version of capabilities
+- https://git-scm.com/docs/gitprotocol-http — Web version of HTTP protocol
 - RFC 4254 — SSH Connection Protocol (for SSH transport details)
 
 **Gitrekt Reference Documents:**
@@ -193,17 +204,30 @@ When implementing features, verify:
 - [ ] Error cases handled (libgit2 error codes, edge cases)
 - [ ] Memory management correct (if NIF code added)
 
+## Getting Protocol Details
+
+**To extract clean text from man pages:**
+```bash
+man gitprotocol-v2 2>/dev/null | col -b > /tmp/gitprotocol-v2.txt
+# Use col -b to remove formatting artifacts (backspaces, bold/underline codes)
+```
+
+**Man page sources (always available on system with git):**
+- `gitprotocol-v2(5)` — Latest protocol version, preferred for implementation
+- `gitprotocol-pack(5)` — Core wire protocol, shared by v1 and v2
+- `gitprotocol-capabilities(5)` — Capability definitions (all versions)
+- `gitprotocol-http(5)` — HTTP transport specifics
+- `gitprotocol-common(5)` — Common elements across protocol versions
+
 ## Error Handling
 
-**If git-scm.com is unreachable:**
-1. Fall back to local references for cached knowledge
-2. Reference RFC 9000 series for Git protocol specifications (alternative authoritative source)
-3. Check libgit2 documentation (https://libgit2.github.io/libgit2/) for C library details
-
-**If local documentation is missing:**
-1. Query WebSearch for the specific Git protocol or libgit2 aspect
-2. Document findings in appropriate reference file for future reference
-3. Note in implementation whether spec details are confirmed or inferred
+**If protocol detail needs verification:**
+1. **Check man pages first** — Always available, authoritative, no network required
+   - `man gitprotocol-<type> | col -b` to get clean text
+   - Man pages are source-of-truth
+2. **Update skill references** — When man page reveals detail not in references, update .md file
+3. **Fall back to web docs** — Only if system man pages unavailable (use git-scm.com)
+4. **Document source** — Always note which man page (with version if visible) provided the detail
 
 **For libgit2 questions:**
 1. Check `references/libgit2_api.md` first (comprehensive API reference)
@@ -211,9 +235,10 @@ When implementing features, verify:
 3. Check GitHub source code: https://github.com/libgit2/libgit2/tree/main/include
 
 **For protocol questions:**
-1. Start with `references/git_protocol_wire.md` (universal rules)
-2. Reference HTTP/SSH files for transport-specific details
-3. Cross-check against official https://git-scm.com/docs/gitprotocol-pack
+1. **Check man pages** — `man gitprotocol-v2 | col -b` for authoritative details
+2. Start with `references/git_protocol_v2.md` for previously collected details
+3. Reference `references/git_protocol_wire.md` for universal rules
+4. Update reference files with any new findings from man pages
 
 ## When to Use NIF (libgit2)
 
