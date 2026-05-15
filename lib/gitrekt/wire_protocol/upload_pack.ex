@@ -109,15 +109,10 @@ defmodule GitRekt.WireProtocol.UploadPack do
 
       Logger.debug("UPLOAD_PACK: created pack (with haves), size=#{byte_size(pack)}")
 
-      cond do
-        "multi_ack" in handle.caps ->
-          {%{handle | state: :done}, [], [{:ack, List.first(haves)}, pack]}
-
-        "multi_ack_detailed" in handle.caps ->
-          {%{handle | state: :done}, [], [{:ack, List.first(haves)}, pack]}
-
-        true ->
-          {%{handle | state: :done}, [], [:nak, pack]}
+      if multi_ack?(handle.caps) do
+        {%{handle | state: :done}, [], [{:ack, List.first(haves)}, pack]}
+      else
+        {%{handle | state: :done}, [], [:nak, pack]}
       end
     end
   end
@@ -133,8 +128,7 @@ defmodule GitRekt.WireProtocol.UploadPack do
 
   @impl true
   def skip(%__MODULE__{state: :disco} = handle) do
-    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
-    %{handle | state: :upload_req, advertised_caps: advertised}
+    %{handle | state: :upload_req, advertised_caps: build_advertised_caps(handle.caps)}
   end
 
   def skip(%__MODULE__{state: :upload_req} = handle), do: %{handle | state: :upload_haves}
@@ -148,8 +142,11 @@ defmodule GitRekt.WireProtocol.UploadPack do
 
   @doc false
   def disco_transition_state(handle, new_state) do
-    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
-    %{handle | state: new_state, caps: [], advertised_caps: advertised}
+    %{handle | state: new_state, caps: [], advertised_caps: build_advertised_caps(handle.caps)}
+  end
+
+  defp build_advertised_caps(caps) do
+    GitRekt.WireProtocol.server_capabilities(@service_name) ++ caps
   end
 
   defp obj_match?({type, _oid}, type), do: true
