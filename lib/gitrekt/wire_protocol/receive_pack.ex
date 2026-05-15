@@ -319,10 +319,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
   end
 
   defp push_cmds(agent, cmds) do
-    case GitAgent.transaction(agent, fn agent -> Enum.each(cmds, &push_cmd(agent, &1)) end) do
-      :ok -> :ok
-      {:error, reason} -> {:error, reason}
-    end
+    GitAgent.transaction(agent, fn agent -> Enum.each(cmds, &push_cmd(agent, &1)) end)
   end
 
   defp push_cmd(agent, {:create, new_oid, name}) do

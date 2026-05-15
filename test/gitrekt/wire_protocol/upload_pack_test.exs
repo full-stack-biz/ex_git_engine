@@ -79,7 +79,7 @@ defmodule GitRekt.WireProtocol.UploadPackTest do
 
       assert new_handle.state == :done
       assert new_handle.caps == []
-      assert length(new_handle.advertised_caps) > 0
+      assert new_handle.advertised_caps != []
     end
 
     test "transitions to :upload_req state" do
@@ -89,7 +89,7 @@ defmodule GitRekt.WireProtocol.UploadPackTest do
 
       assert new_handle.state == :upload_req
       assert new_handle.caps == []
-      assert length(new_handle.advertised_caps) > 0
+      assert new_handle.advertised_caps != []
     end
 
     test "clears caps field and includes them in advertised_caps" do
@@ -98,7 +98,7 @@ defmodule GitRekt.WireProtocol.UploadPackTest do
       new_handle = UploadPack.disco_transition_state(handle, :done)
 
       assert new_handle.caps == []
-      assert length(new_handle.advertised_caps) > 0
+      assert new_handle.advertised_caps != []
       assert Enum.all?(new_handle.advertised_caps, &is_binary/1)
       assert "extra-cap" in new_handle.advertised_caps
     end

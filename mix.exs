@@ -30,7 +30,9 @@ defmodule GitRekt.Mixfile do
       {:elixir_make, "~> 0.6"},
       {:stream_split, "~> 0.1"},
       {:telemetry, "~> 1.1"},
-      {:credo, "~> 1.7", only: :dev, runtime: false}
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:ex_dna, "~> 1.1", only: [:dev, :test], runtime: false},
+      {:ex_slop, "~> 0.3", only: [:dev, :test], runtime: false}
     ]
   end
 end
