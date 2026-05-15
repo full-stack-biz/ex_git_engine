@@ -6,6 +6,19 @@ Sources:
 - https://git-scm.com/docs/gitprotocol-pack
 - https://git-scm.com/docs/gitprotocol-capabilities
 
+## Table of Contents
+
+- [pkt-line Format](#pkt-line-format)
+- [Reference Discovery Phase (receive-pack)](#reference-discovery-phase-receive-pack)
+- [Push Commands Phase (receive-pack)](#push-commands-phase-receive-pack)
+- [Report-Status Response Phase (receive-pack)](#report-status-response-phase-receive-pack)
+- [Post-Receive Hook Output Phase (receive-pack)](#post-receive-hook-output-phase-receive-pack)
+- [Reference Discovery Phase (upload-pack)](#reference-discovery-phase-upload-pack)
+- [Fetch Negotiation Phase (upload-pack)](#fetch-negotiation-phase-upload-pack)
+- [Common Protocol Rules (All Operations)](#common-protocol-rules-all-operations)
+- [Full Push Example (Wire Protocol Only)](#full-push-example-wire-protocol-only)
+- [GitRekt Implementation Notes](#gitrekt-implementation-notes)
+
 ---
 
 ## pkt-line Format
@@ -44,19 +57,43 @@ S: flush-pkt
 
 **Critical**: Capabilities appear ONLY on the FIRST ref line, NUL-separated. All subsequent ref lines have NO capabilities.
 
+### Sideband-64k in Receive-Pack Context
+
+**Official spec**: "If *side-band* or *side-band-64k* capabilities have been specified by the client, the server will send the packfile data multiplexed."
+
+**In receive-pack (push):**
+- Client SENDS packfile to server
+- Server RECEIVES packfile
+- Server does NOT send packfile, so sideband is not used for packfile transmission
+- **BUT:** Server CAN send hook output via sideband channel 2 AFTER report-status
+
+**Advertising side-band-64k in receive-pack:**
+- Is technically valid per spec (both services can have it)
+- But has NO effect on push responses (report-status is plain pkt-line)
+- Only affects if server sends sideband channel 2 messages (post-receive hook output)
+
 ### Valid receive-pack Capabilities
+
+Per gitprotocol-capabilities spec: "The *atomic*, *report-status*, *report-status-v2*, *delete-refs*, *quiet*, and *push-cert* capabilities are sent and recognized by the receive-pack (push to server) process. The *ofs-delta* and *side-band-64k* capabilities are sent and recognized by both upload-pack and receive-pack protocols."
 
 - `report-status` — server can send push result report
 - `report-status-v2` — extended report-status with proc-receive hook support
 - `delete-refs` — server accepts zero-id as target (ref deletion)
-- `ofs-delta` — server understands OBJ_OFS_DELTA pack format
+- `ofs-delta` — server understands OBJ_OFS_DELTA pack format (BOTH services)
+- `side-band-64k` — server can multiplex packfile data during upload (BOTH services, client can use this when sending packfile)
 - `atomic` — server can apply all ref updates atomically or none
 - `push-options` — server accepts push options
 - `push-cert=<nonce>` — server accepts signed push certificates
 - `quiet` — server can suppress progress output if client requests it
 - `agent=X` — informational server version string
+- `session-id=<id>` — session identifier for tracking (BOTH services)
 
 **Server MUST NOT advertise capabilities it does not support.**
+
+**CRITICAL DISTINCTION: Sideband in receive-pack**
+- `side-band-64k` capability in receive-pack applies ONLY to how the CLIENT sends the packfile data
+- It does NOT apply to the SERVER's report-status response
+- The server sends report-status as plain pkt-line format, never multiplexed
 
 ---
 
@@ -95,6 +132,23 @@ Command structures:
 - Packfile MUST NOT be sent if only command is delete
 - If push-options were negotiated, client sends them between command flush-pkt and packfile start
 
+### Packfile Data Transfer (receive-pack)
+
+If client advertised `side-band-64k` capability, the client SENDS the packfile multiplexed (not the server).
+
+Per gitprotocol-pack spec:
+> "Each packet starting with the packet-line length of the amount of data that follows, followed by a single byte specifying the sideband the following data is coming in on... The sideband byte will be a *1*, *2* or a *3*. Sideband *1* will contain packfile data, sideband *2* will be used for progress information that the client will generally print to stderr and sideband *3* is used for error information."
+
+**This is for CLIENT→SERVER packfile transmission, not server responses.**
+
+Format when sideband is negotiated:
+```
+[4-byte pkt-line length] [1-byte stream code] [payload data]
+  - stream code 1: packfile data
+  - stream code 2: progress (client progress only, not server)
+  - stream code 3: error
+```
+
 ---
 
 ## Report-Status Response Phase (receive-pack)
@@ -104,7 +158,11 @@ Command structures:
 From gitprotocol-capabilities spec:
 > "The receive-pack process can receive a report-status capability, which tells it that the client wants a report of what happened after a packfile upload and reference update. **If the pushing client requests this capability**, after unpacking and updating references the server will respond..."
 
-Report format:
+**CRITICAL: Report-status is ALWAYS plain pkt-line, NEVER sideband-wrapped.** (Even if side-band-64k capability was negotiated.)
+
+From official spec: "If *side-band* or *side-band-64k* capabilities have been specified by the client, **the server will send the packfile data multiplexed**." (Emphasis: packfile data only, not responses.)
+
+Report format (plain pkt-line):
 ```
 report-status = unpack-status
                 1*(command-status)
@@ -136,6 +194,53 @@ S: 0000
 ```
 
 **If the client did NOT request report-status, the server sends nothing and closes the connection.**
+
+---
+
+## Post-Receive Hook Output Phase (receive-pack)
+
+**After report-status completes, the server runs the `post-receive` hook and sends its output via sideband channel 2.**
+
+This is NOT part of the official protocol spec, but is standard Git server behavior (documented in Git source: builtin/receive-pack.c line 2718-2719).
+
+Hook output handling from Git source code:
+- Server runs `post-receive` hook with sideband enabled
+- Hook's stdout/stderr is captured via `copy_to_sideband()` function
+- Output is sent via `send_sideband(1, 2, ...)` — **channel 2** (informational messages)
+- Client receives and displays as `remote: [message]`
+
+**Protocol sequence:**
+```
+S: 000eunpack ok\n                    (report-status: unpack result)
+S: 0018ok refs/heads/master\n         (report-status: ref result)
+S: 0000                                (report-status: flush)
+S: [sideband channel 2 hook output]    (post-receive hook output)
+S: 0000                                (final flush)
+```
+
+**Client behavior:**
+- Reads report-status pkt-lines (unpack ok, ref ok/ng) — **processes internally for success/failure determination**
+- Receives sideband channel 2 data — **displays to user as `remote: ...`**
+
+**Real example (Bitbucket):**
+```
+Server sends:
+  000eunpack ok\n
+  0018ok refs/heads/feature/cyclone\n
+  0000
+  [sideband ch2] View pull request for feature/cyclone => release/cyclone:\n
+  [sideband ch2]   https://bitbucket.org/.../pull-requests/191\n
+  0000
+
+Client displays to user:
+  remote:
+  remote: View pull request for feature/cyclone => release/cyclone:
+  remote:   https://bitbucket.org/.../pull-requests/191
+  
+  feature/cyclone -> feature/cyclone
+```
+
+**Key point:** Report-status lines are NOT displayed to user. Only hook output (sideband ch2) is shown as `remote: ...`
 
 ---
 
@@ -233,14 +338,17 @@ S: 0000
 
 - **`caps`**: Capabilities parsed from CLIENT's first command line (via `parse_caps/1`)
   - Source: parsed from push request body (first command pkt-line, NUL-separated)
-  - This is what CLIENT chose to request
+  - This is what CLIENT chose to request (subset of advertised)
   - Used for all decision-making (report-status, etc.)
   - MUST be validated against advertised capabilities
+  - Format: list of strings like ["report-status", "side-band-64k", "agent=git/2.54.0"]
 
 - **`advertised_caps`**: Capabilities server advertised during reference discovery
-  - Source: initial capabilities sent in discovery phase
-  - Used for validation: unknown capabilities received from client must abort
-  - HTTP transport may skip actual discovery phase and seed this from initial caps
+  - Source: initial capabilities sent in discovery phase (server side)
+  - Contains ONLY server capabilities, NOT client capabilities
+  - Used for validation: ensures client didn't request unknown capabilities
+  - CRITICAL: Should NEVER be concatenated with `caps` (client capabilities)
+  - Format: list of strings like ["agent=gitrekt/0.3.9", "report-status", "delete-refs", ...]
 
 ### Protocol Rule: "Requests" Means Client Sends It
 
@@ -253,14 +361,27 @@ From gitprotocol-capabilities spec:
 
 ### Capability Validation Requirements
 
-After extracting `caps` from client request, validate:
+From gitprotocol-capabilities v1 spec:
+> "The client MUST NOT ask for capabilities the server did not say it supports."
+> "Server MUST diagnose and abort if capabilities it does not understand were sent."
+
+After extracting `caps` from client request:
 
 ```elixir
+# caps = what client requested (from first command line)
+# advertised_caps = what server advertised in discovery (ONLY server capabilities)
+
+# MUST NOT concatenate them
+advertised_caps = get_server_advertised_capabilities()  # NOT: ++ client_caps
+
+# MUST validate
 unknown_caps = caps -- advertised_caps
 if unknown_caps != [] do
   abort_with_error("unknown capabilities: #{inspect(unknown_caps)}")
 end
 ```
+
+**CRITICAL**: `advertised_caps` contains ONLY server capabilities. It should NEVER include client capabilities.
 
 Only after validation passes should the server process client requests.
 

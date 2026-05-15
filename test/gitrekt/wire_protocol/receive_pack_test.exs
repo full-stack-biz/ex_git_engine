@@ -5,8 +5,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
   alias GitRekt.Git
 
   describe "report_status/1" do
-    test "sends report-status only when client explicitly requests capability" do
-      # Create a handle with report-status capability
+    test "returns tuple protocol elements" do
       handle = %ReceivePack{
         caps: ["report-status"],
         cmds: [
@@ -14,35 +13,13 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
         ]
       }
 
-      result = ReceivePack.report_status(handle)
-
-      assert :flush in result
-      assert "unpack ok" in result
-      assert Enum.any?(result, fn item -> is_binary(item) && String.starts_with?(item, "ok ") end)
+      assert [
+               {:unpack, "ok"},
+               {:ok, "refs/heads/main"}
+             ] = ReceivePack.report_status(handle)
     end
 
-    test "does NOT send report-status when client doesn't request it" do
-      # Create a handle WITHOUT report-status capability
-      # Note: report_status/1 always generates a report; the caller (next/2) checks caps
-      handle = %ReceivePack{
-        # No report-status
-        caps: ["delete-refs"],
-        cmds: [
-          {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"}
-        ]
-      }
-
-      result = ReceivePack.report_status(handle)
-
-      # report_status/1 generates status; calling code checks caps before calling it
-      # So this test verifies that when report-status is NOT in caps, the calling code
-      # would not call report_status in the first place
-      assert "report-status" not in handle.caps
-      # Function still generates report (caller filters)
-      assert :flush in result
-    end
-
-    test "includes all command refs in report-status response" do
+    test "includes all command refs as tuples" do
       handle = %ReceivePack{
         caps: ["report-status"],
         cmds: [
@@ -53,17 +30,15 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
         ]
       }
 
-      result = ReceivePack.report_status(handle)
-
-      # Should include status for all three commands
-      assert "ok refs/heads/main" in result
-      assert "ok refs/heads/develop" in result
-      assert "ok refs/heads/old" in result
-      assert "unpack ok" in result
-      assert :flush in result
+      assert [
+               {:unpack, "ok"},
+               {:ok, "refs/heads/main"},
+               {:ok, "refs/heads/develop"},
+               {:ok, "refs/heads/old"}
+             ] = ReceivePack.report_status(handle)
     end
 
-    test "response ends with flush marker for proper protocol termination" do
+    test "does not include flush (added by response builders)" do
       handle = %ReceivePack{
         caps: ["report-status"],
         cmds: [
@@ -73,7 +48,8 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
 
       result = ReceivePack.report_status(handle)
 
-      assert List.last(result) == :flush
+      assert {:flush} not in result
+      assert :flush not in result
     end
   end
 
@@ -452,17 +428,15 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
       assert "atomic" in new_handle.advertised_caps
     end
 
-    test "skip disco->update_req matches normal disco->update_req flow from next/2" do
-      # Verify skip produces same advertised_caps as the normal catch-all path would
+    test "skip disco->update_req sets advertised_caps to server capabilities" do
       advertised_server = GitRekt.WireProtocol.server_capabilities("git-receive-pack")
-      extra_caps = ["report-status"]
 
-      handle = %ReceivePack{state: :disco, caps: extra_caps, advertised_caps: []}
+      handle = %ReceivePack{state: :disco, caps: [], advertised_caps: []}
       skipped = ReceivePack.skip(handle)
 
-      # Should match what the normal next/2 flow does
-      expected_advertised = advertised_server ++ extra_caps
-      assert skipped.advertised_caps == expected_advertised
+      # skip() sets advertised_caps to server capabilities
+      assert skipped.advertised_caps == advertised_server
+      assert skipped.state == :update_req
     end
   end
 
@@ -489,114 +463,296 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
       # Handle should be returned as-is
       assert result_handle.state == :done
     end
+  end
 
-    test "done handler clears cmds after successful push simulation" do
-      # This test verifies the fix: after push, cmds should be cleared
-      # to prevent double-push on subsequent done handler calls
+  describe "pkt_line with protocol tuple format" do
+    test "{:unpack, \"ok\"} encodes to pkt-line" do
+      encoded = GitRekt.WireProtocol.pkt_line({:unpack, "ok"})
 
-      # Create a handle with cmds set (as if commands were just parsed)
-      handle = %ReceivePack{
-        state: :done,
-        cmds: [
-          {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"}
-        ],
-        # No report-status, so no output
-        caps: [],
-        agent: nil,
-        writepack: nil,
-        # No packfile
-        writepack_progress: %{received_bytes: 0},
-        # Would normally be a repo struct
-        repo: nil
-      }
+      assert "000e" <> "unpack ok\n" == encoded
+    end
 
-      # Even though we can't fully invoke push without a real agent/repo,
-      # we verify the structure: if cmds were successfully processed,
-      # the return value should have cmds: [] to make handler idempotent
+    test "{:ok, refname} encodes to pkt-line" do
+      encoded = GitRekt.WireProtocol.pkt_line({:ok, "refs/heads/main"})
 
-      # In the actual code path (with real repo):
-      # {%{handle|repo: repo, cmds: []}, [], output}
-      # This test just confirms the fix is in place by reading the code
+      assert "0017" <> "ok refs/heads/main\n" == encoded
+    end
 
-      # Verify by simulating what the done handler returns:
-      # (This is a structural test, not a full integration test)
-      # Cmds should be cleared
-      successful_result_handle = %{handle | cmds: []}
+    test "{:ng, refname, reason} encodes to pkt-line" do
+      encoded = GitRekt.WireProtocol.pkt_line({:ng, "refs/heads/main", "permission denied"})
 
-      # If done handler is called again on this result_handle, it should be no-op
-      {result2, remaining2, output2} = ReceivePack.next(successful_result_handle, [])
-      assert remaining2 == []
-      assert output2 == []
+      assert is_binary(encoded)
+      assert String.contains?(encoded, "ng refs/heads/main permission denied")
+    end
+
+    test "{:sideband, channel, text} wraps with sideband and returns binary" do
+      encoded = GitRekt.WireProtocol.pkt_line({:sideband, 2, "Build passed"})
+
+      <<_size::binary-size(4), channel::binary-size(1), _rest::binary>> = encoded
+      assert channel == <<2>>
+    end
+
+    test ":flush encodes to 0000" do
+      encoded = GitRekt.WireProtocol.pkt_line(:flush)
+      assert "0000" == encoded
     end
   end
 
-  describe "advisory messages" do
-    test "format_advisories/1 encodes each advisory as PKT-LINE" do
-      advisories = ["Deployment successful"]
-      result = ReceivePack.format_advisories(advisories)
+  describe "sideband_wrap/2 function" do
+    test "wraps text with channel 1 marker and correct frame size" do
+      line = "unpack ok"
+      wrapped = ReceivePack.sideband_wrap(line, 1)
 
-      assert length(result) == 1
-      encoded = List.first(result)
-      assert is_binary(encoded)
-      assert String.contains?(encoded, "Deployment successful")
+      # Format: 4-byte hex size + channel byte + data + newline
+      # size = 4 (hex) + 1 (channel) + 9 (len("unpack ok")) + 1 (newline) = 15 = 0x0f
+      assert is_binary(wrapped)
+      assert String.starts_with?(wrapped, "000f")
+      assert String.slice(wrapped, 4..4) == <<1>>
+      assert String.contains?(wrapped, "unpack ok\n")
     end
 
-    test "format_advisories/1 with empty list returns empty list" do
-      result = ReceivePack.format_advisories([])
-      assert result == []
+    test "wraps text with channel 2 marker" do
+      line = "remote: Build passed"
+      wrapped = ReceivePack.sideband_wrap(line, 2)
+
+      assert is_binary(wrapped)
+      assert String.slice(wrapped, 4..4) == <<2>>
+      assert String.contains?(wrapped, "remote: Build passed\n")
     end
 
-    test "format_advisories/1 encodes multiple advisories" do
-      advisories = ["First message", "Second message", "Third message"]
-      result = ReceivePack.format_advisories(advisories)
+    test "calculates correct frame size with channel byte included" do
+      line = "ok ref"
+      wrapped = ReceivePack.sideband_wrap(line, 1)
 
-      assert length(result) == 3
-      assert Enum.any?(result, &String.contains?(&1, "First message"))
-      assert Enum.any?(result, &String.contains?(&1, "Second message"))
-      assert Enum.any?(result, &String.contains?(&1, "Third message"))
+      # size = 4 + 1 + 6 + 1 = 12 = 0x0c
+      size_hex = String.slice(wrapped, 0..3)
+      assert size_hex == "000c"
     end
 
-    test "format_advisories/1 each line ends with newline for PKT-LINE compliance" do
-      advisories = ["Test message"]
-      result = ReceivePack.format_advisories(advisories)
+    test "handles large messages with proper sizing" do
+      line = String.duplicate("x", 100)
+      wrapped = ReceivePack.sideband_wrap(line, 1)
 
-      encoded = List.first(result)
-      assert String.ends_with?(encoded, "\n")
+      # size = 4 + 1 + 100 + 1 = 106 = 0x6a
+      assert String.starts_with?(wrapped, "006a")
     end
 
-    test "advisory messages inserted before flush in report-status output" do
+    test "includes newline as part of frame content" do
+      line = "status"
+      wrapped = ReceivePack.sideband_wrap(line, 1)
+
+      # Newline must be inside the frame (included in size calculation)
+      assert String.ends_with?(wrapped, "status\n")
+    end
+  end
+
+  describe "response builders tuple structure" do
+    test "push_success_output without sideband produces status tuples (no flush)" do
       handle = %ReceivePack{
-        caps: ["report-status"],
+        advertised_caps: ["report-status"],
+        caps: [],
         cmds: [
           {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"}
         ]
       }
 
-      base_output = ReceivePack.report_status(handle)
-      advisories = ["Build passed"]
-      advisory_output = ReceivePack.format_advisories(advisories)
+      assert [
+               {:unpack, "ok"},
+               {:ok, "refs/heads/main"}
+             ] = ReceivePack.push_success_output(handle)
+    end
 
-      # Protocol spec: advisories come after status lines but before final flush
-      # So we insert advisories before the :flush marker
-      combined =
-        base_output
-        |> Enum.split_while(&(&1 != :flush))
-        |> then(fn {status_lines, [_flush]} -> status_lines ++ advisory_output ++ [:flush] end)
+    test "build_push_response without sideband: status + string messages + flush" do
+      handle = %ReceivePack{
+        advertised_caps: ["report-status"],
+        caps: [],
+        cmds: [
+          {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"}
+        ]
+      }
 
-      # Verify order: status comes before advisory
-      unpack_idx = Enum.find_index(combined, &(&1 == "unpack ok"))
+      messages = ["Build passed"]
 
-      advisory_idx =
-        Enum.find_index(combined, fn item ->
-          is_binary(item) && String.contains?(item, "Build passed")
-        end)
+      assert [
+               {:unpack, "ok"},
+               {:ok, "refs/heads/main"},
+               "Build passed",
+               :flush
+             ] = ReceivePack.build_push_response(handle, messages)
+    end
 
-      assert unpack_idx != nil
-      assert advisory_idx != nil
-      assert advisory_idx > unpack_idx
+    test "push_success_output returns sideband_report tuple wrapping inner status + flush" do
+      handle = %ReceivePack{
+        advertised_caps: ["report-status", "side-band-64k"],
+        caps: ["side-band-64k"],
+        cmds: [
+          {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"}
+        ]
+      }
 
-      # Flush is last
-      assert List.last(combined) == :flush
+      assert [
+               {:sideband_report, 1, [{:unpack, "ok"}, {:ok, "refs/heads/main"}, :flush]}
+             ] = ReceivePack.push_success_output(handle)
+    end
+
+    test "build_push_response with sideband: sideband_report + ch2 messages + flush" do
+      handle = %ReceivePack{
+        advertised_caps: ["report-status", "side-band-64k"],
+        caps: ["side-band-64k"],
+        cmds: [
+          {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"}
+        ]
+      }
+
+      messages = ["Build passed"]
+
+      assert [
+               {:sideband_report, 1, [{:unpack, "ok"}, {:ok, "refs/heads/main"}, :flush]},
+               {:sideband, 2, "Build passed"},
+               :flush
+             ] = ReceivePack.build_push_response(handle, messages)
+    end
+  end
+
+  describe "push response without side-band-64k" do
+    test "report-status returns protocol tuples" do
+      handle = %ReceivePack{
+        advertised_caps: ["report-status"],
+        caps: [],
+        cmds: [
+          {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"}
+        ]
+      }
+
+      assert [
+               {:unpack, "ok"},
+               {:ok, "refs/heads/main"}
+             ] = ReceivePack.report_status(handle)
+    end
+
+    test "hook messages not wrapped without side-band-64k capability" do
+      messages = ["remote: Build passed", "remote: Deployment successful"]
+
+      # Without side-band-64k, messages are plain text lines (not wrapped)
+      response = messages ++ [:flush]
+
+      # Should be plain strings, not sideband-wrapped binaries
+      plain_messages = Enum.filter(response, &is_binary/1)
+      assert length(plain_messages) == 2
+      assert "remote: Build passed" in plain_messages
+      assert "remote: Deployment successful" in plain_messages
+    end
+
+    test "complete response without sideband: status + messages + flush" do
+      status_lines = ["unpack ok", "ok refs/heads/main"]
+      messages = ["remote: Build passed"]
+
+      response = status_lines ++ messages ++ [:flush]
+
+      # Verify no sideband wrapping (all plain strings except flush)
+      plain_items = Enum.filter(response, &is_binary/1)
+      assert length(plain_items) == 3
+      assert Enum.all?(plain_items, &(not String.starts_with?(&1, "00")))
+      assert List.last(response) == :flush
+    end
+  end
+
+  describe "push response with side-band-64k" do
+    test "report-status wrapped with channel 1" do
+      status_lines = ["unpack ok", "ok refs/heads/main"]
+
+      wrapped = Enum.map(status_lines, &ReceivePack.sideband_wrap(&1, 1))
+
+      # All should be sideband-wrapped binaries
+      assert Enum.all?(wrapped, &is_binary/1)
+      assert Enum.all?(wrapped, fn x -> String.starts_with?(x, "00") end)
+
+      # All should have channel 1
+      assert Enum.all?(wrapped, fn x -> String.slice(x, 4..4) == <<1>> end)
+    end
+
+    test "hook messages wrapped with channel 2" do
+      messages = ["remote: Build passed", "remote: Deployment successful"]
+
+      wrapped = Enum.map(messages, &ReceivePack.sideband_wrap(&1, 2))
+
+      # All should be sideband-wrapped binaries
+      assert Enum.all?(wrapped, &is_binary/1)
+
+      # All should have channel 2
+      assert Enum.all?(wrapped, fn x -> String.slice(x, 4..4) == <<2>> end)
+    end
+
+    test "complete response with sideband: status + messages + flush" do
+      status_lines = ["unpack ok", "ok refs/heads/main"]
+      messages = ["remote: Build passed"]
+
+      status_wrapped = Enum.map(status_lines, &ReceivePack.sideband_wrap(&1, 1))
+      messages_wrapped = Enum.map(messages, &ReceivePack.sideband_wrap(&1, 2))
+
+      response = status_wrapped ++ messages_wrapped ++ [:flush]
+
+      # Status frames should use channel 1
+      status_channels = status_wrapped |> Enum.map(&String.slice(&1, 4..4)) |> Enum.uniq()
+      assert status_channels == [<<1>>]
+
+      # Message frames should use channel 2
+      message_channels = messages_wrapped |> Enum.map(&String.slice(&1, 4..4)) |> Enum.uniq()
+      assert message_channels == [<<2>>]
+
+      # Flush must be last
+      assert List.last(response) == :flush
+    end
+
+    test "sideband frames are pre-wrapped, ready for final encode pass" do
+      status_lines = ["unpack ok"]
+      status_wrapped = Enum.map(status_lines, &ReceivePack.sideband_wrap(&1, 1))
+
+      # Wrapped frames should already have size prefix
+      assert Enum.all?(status_wrapped, fn x ->
+               is_binary(x) && String.match?(x, ~r/^[0-9a-f]{4}/)
+             end)
+    end
+  end
+
+  describe "pkt_line with capabilities" do
+    test "status tuples are always plain pkt-line, never sideband-wrapped" do
+      # Per git protocol spec: report-status is plain pkt-line even if side-band-64k negotiated
+      # Evidence: git source send-pack.c closes sideband demux before reading status
+
+      caps_with_sideband = ["side-band-64k", "report-status"]
+      result_unpack = GitRekt.WireProtocol.pkt_line({:unpack, "ok"}, caps_with_sideband)
+      result_ok = GitRekt.WireProtocol.pkt_line({:ok, "refs/heads/main"}, caps_with_sideband)
+
+      result_ng =
+        GitRekt.WireProtocol.pkt_line(
+          {:ng, "refs/heads/main", "non-fast-forward"},
+          caps_with_sideband
+        )
+
+      # All should be plain pkt-line format (no sideband channel byte 0x01)
+      assert String.match?(result_unpack, ~r/^[0-9a-f]{4}unpack ok\n$/)
+      assert String.match?(result_ok, ~r/^[0-9a-f]{4}ok refs\/heads\/main\n$/)
+      assert String.match?(result_ng, ~r/^[0-9a-f]{4}ng refs\/heads\/main non-fast-forward\n$/)
+    end
+
+    test "flush is unchanged regardless of capabilities" do
+      caps_with_sideband = ["side-band-64k"]
+      caps_without = []
+
+      result_with = GitRekt.WireProtocol.pkt_line(:flush, caps_with_sideband)
+      result_without = GitRekt.WireProtocol.pkt_line(:flush, caps_without)
+
+      assert result_with == "0000"
+      assert result_without == "0000"
+    end
+
+    test "sideband tuple passed through unchanged" do
+      caps = ["side-band-64k"]
+      result = GitRekt.WireProtocol.pkt_line({:sideband, 2, "hook output"}, caps)
+
+      # Already-wrapped sideband should pass through pkt_line unchanged
+      assert String.match?(result, ~r/^[0-9a-f]{4}\x02hook output\n$/)
     end
   end
 end

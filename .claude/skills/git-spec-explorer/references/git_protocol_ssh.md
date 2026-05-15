@@ -9,6 +9,19 @@ Sources:
 
 **Core wire protocol:** See `git_protocol_wire.md` for pkt-line format, capability negotiation, push/fetch flows.
 
+## Table of Contents
+
+- [SSH Transport Overview](#ssh-transport-overview)
+- [SSH Connection Phases](#ssh-connection-phases)
+- [SSH Command Execution Details](#ssh-command-execution-details)
+- [SSH Environment Variables](#ssh-environment-variables)
+- [SSH Authentication Authorization](#ssh-authentication-authorization)
+- [SSH Wire Protocol (Identical with HTTP)](#ssh-wire-protocol-identical-with-http)
+- [SSH Error Handling](#ssh-error-handling)
+- [SSH Debugging](#ssh-debugging)
+- [Common SSH Issues](#common-ssh-issues)
+- [GitRekt SSH Implementation](#gitrekt-ssh-implementation)
+
 ---
 
 ## SSH Transport Overview
@@ -98,11 +111,34 @@ When git service completes, SSH channel closes. Exit status indicates success/fa
 
 ## SSH Command Execution Details
 
+**CRITICAL: Repository path quoting** — Git always quotes repository path with **single quotes**:
+```bash
+ssh git@host 'git-receive-pack /path/to/repo.git'  # Correct
+ssh git@host "git-receive-pack /path/to/repo.git"  # Wrong (allows shell expansion)
+```
+
+The command name `git-receive-pack` is spelled with dashes (not underscores). Can be overridden by client configuration.
+
 ### Push (git-receive-pack)
 
 Client requests execution:
 ```bash
-ssh git@host "git-receive-pack /path/to/repo.git"
+ssh git@host "git-receive-pack '/path/to/repo.git'"
+```
+
+For `ssh://user@host/path/to/repo.git` URLs: path is absolute (leading `/`)
+```bash
+ssh user@host "git-receive-pack '/path/to/repo.git'"
+```
+
+For `user@host:path/to/repo.git` URLs: path is relative to home directory (no `/`)
+```bash
+ssh user@host "git-receive-pack 'path/to/repo.git'"
+```
+
+For `~alice/project.git` URLs: home directory reference
+```bash
+ssh user@host "git-receive-pack '~alice/project.git'"
 ```
 
 Server executes `git-receive-pack` with the repository path. Process runs as the authenticated SSH user.
@@ -173,15 +209,25 @@ Server sends tar/zip archive data (different protocol from push/fetch).
 
 ## SSH Environment Variables
 
-Standard Git environment variables are typically passed:
+Git passes Extra Parameters via the `GIT_PROTOCOL` environment variable. This requires SSH variant support:
 
-- `GIT_PROTOCOL` — protocol version (e.g., "2")
+**Protocol Version 2 (GIT_PROTOCOL header)**:
+```bash
+GIT_PROTOCOL=version=2 ssh git@host "git-receive-pack '/repo.git'"
+```
+
+The `ssh.variant` configuration variable must indicate SSH supports passing environment variables. Standard OpenSSH supports this.
+
+**Standard Environment Variables**:
+- `GIT_PROTOCOL` — Extra Parameters (e.g., "version=2") as colon-separated string
 - `GIT_USER_AGENT` — client version string
-- `SSH_CLIENT` — connection info from SSH server
+- `SSH_CLIENT` — connection info from SSH server (if set by SSH server)
 - `USER` — authenticated username
 - `HOME` — home directory of authenticated user
 
 Git service reads these to customize behavior (e.g., protocol version support, user identification).
+
+**Important**: If SSH variant doesn't support environment variables (e.g., restricted shells), GIT_PROTOCOL is not passed, and protocol falls back to version 0/1.
 
 ---
 

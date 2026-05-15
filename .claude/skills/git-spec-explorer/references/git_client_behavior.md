@@ -7,6 +7,14 @@ Sources:
 - https://github.com/git/git/blob/v2.54.0/send-pack.c — Push protocol handling
 - https://github.com/git/git/blob/v2.54.0/remote-curl.c — HTTP transport (applies principles to all transports)
 
+## Table of Contents
+
+- [Push Flow (git push)](#push-flow-git-push)
+- [Transport Integration](#transport-integration)
+- [Debugging "error: failed to push some refs"](#debugging-error-failed-to-push-some-refs)
+- [Reference Format Validation](#reference-format-validation)
+- [Implementation Notes for Servers](#implementation-notes-for-servers)
+
 ---
 
 ## Push Flow (git push)

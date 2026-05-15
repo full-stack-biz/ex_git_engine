@@ -7,6 +7,27 @@ Sources:
 - https://libgit2.github.io/libgit2/ (API documentation)
 - https://github.com/libgit2/libgit2/tree/main/docs
 
+## Table of Contents
+
+- [libgit2 Overview](#libgit2-overview)
+- [libgit2 Versioning](#libgit2-versioning)
+- [Core Concepts](#core-concepts)
+- [Repository Operations](#repository-operations)
+- [Object Lookups](#object-lookups)
+- [Commits](#commits)
+- [Trees and Blobs](#trees-and-blobs)
+- [References](#references)
+- [Index (Staging Area)](#index-staging-area)
+- [Status and Diff](#status-and-diff)
+- [Object ID (OID) Handling](#object-id-oid-handling)
+- [Error Handling](#error-handling)
+- [Thread Safety](#thread-safety)
+- [NIF Wrapper Implications (GitRekt)](#nif-wrapper-implications-gitrekt)
+- [Common libgit2 Patterns](#common-libgit2-patterns)
+- [Common Pitfalls](#common-pitfalls)
+- [Version-Specific Considerations](#version-specific-considerations)
+- [Debugging libgit2](#debugging-libgit2)
+
 ---
 
 ## libgit2 Overview
