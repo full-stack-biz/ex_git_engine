@@ -14,11 +14,13 @@ defmodule GitRekt.WireProtocol do
   When processing a entire (not chunked), one can use `run/2` to execute all the steps in a single call.
   """
 
+  require Logger
+
   alias GitRekt.Git
   alias GitRekt.GitAgent
   alias GitRekt.GitRef
 
-  @upload_caps ~w(multi_ack multi_ack_detailed)
+  @upload_caps ~w(multi_ack multi_ack_detailed no-done)
   @receive_caps ~w(report-status delete-refs ofs-delta atomic side-band-64k)
 
   @doc """
@@ -162,6 +164,9 @@ defmodule GitRekt.WireProtocol do
   def pkt_line({:unpack, status}, _caps), do: pkt_line("unpack #{status}")
   def pkt_line({:ok, refname}, _caps), do: pkt_line("ok #{refname}")
   def pkt_line({:ng, refname, reason}, _caps), do: pkt_line("ng #{refname} #{reason}")
+  def pkt_line({:ack, oid}, _caps), do: pkt_line({:ack, oid})
+  def pkt_line({:ack, oid, status}, _caps), do: pkt_line({:ack, oid, status})
+  def pkt_line(:nak, _caps), do: pkt_line(:nak)
 
   def pkt_line({:sideband_report, channel, inner}, _caps),
     do: pkt_line({:sideband_report, channel, inner})
@@ -170,6 +175,7 @@ defmodule GitRekt.WireProtocol do
     do: GitRekt.WireProtocol.ReceivePack.sideband_wrap(text, channel)
 
   def pkt_line(:flush, _caps), do: "0000"
+  def pkt_line(<<"PACK", _rest::binary>> = pack, _caps), do: pack
 
   def pkt_line(data, _caps) when is_binary(data),
     do:
@@ -205,12 +211,15 @@ defmodule GitRekt.WireProtocol do
   end
 
   defp exec_next_state(service, lines, acc, old_state, ref, event_time) do
+    Logger.debug("EXEC_NEXT_STATE: service.state=#{service.state}, lines_count=#{length(lines)}, acc_length=#{length(acc)}")
     case apply(service.__struct__, :next, [service, lines]) do
       {service, [], out} ->
+        Logger.debug("EXEC_NEXT_STATE: got empty lines, output_length=#{length(out)}, returning")
         telemetry_stop(service, old_state, ref, event_time)
         {service, acc ++ out}
 
       {service, lines, out} ->
+        Logger.debug("EXEC_NEXT_STATE: got more lines (#{length(lines)}), output_length=#{length(out)}, recursing with new_state=#{service.state}")
         telemetry_next(service, old_state, ref, event_time)
         exec_next_state(service, lines, acc ++ out, service.state, ref, event_time)
     end
