@@ -31,14 +31,14 @@ defmodule GitRekt.WireProtocol.UploadPack do
 
   @impl true
   def next(%__MODULE__{state: :disco} = handle, [:flush | lines]) do
-    advertised = GitRekt.WireProtocol.server_capabilities(@service_name)
+    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
 
     {%{handle | state: :done, caps: [], advertised_caps: advertised}, lines,
      reference_discovery(handle.agent, @service_name, handle.caps)}
   end
 
   def next(%__MODULE__{state: :disco} = handle, lines) do
-    advertised = GitRekt.WireProtocol.server_capabilities(@service_name)
+    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
 
     {%{handle | state: :upload_req, caps: [], advertised_caps: advertised}, lines,
      reference_discovery(handle.agent, @service_name, handle.caps)}
@@ -97,16 +97,21 @@ defmodule GitRekt.WireProtocol.UploadPack do
   end
 
   def next(%__MODULE__{state: :pack} = handle, []) do
+    Logger.debug("UPLOAD_PACK: pack state with empty input, haves=#{length(handle.haves)}, wants=#{length(handle.wants)}")
     if Enum.empty?(handle.haves) do
       {:ok, pack} = GitAgent.pack_create(handle.agent, handle.wants, timeout: :infinity)
+      Logger.debug("UPLOAD_PACK: created pack (no haves), size=#{byte_size(pack)}")
       {%{handle | state: :done}, [], [:nak, pack]}
     else
       haves = List.flatten(Enum.reverse(handle.haves))
+      Logger.debug("UPLOAD_PACK: creating pack with haves=#{length(haves)}")
 
       {:ok, pack} =
         GitAgent.pack_create(handle.agent, handle.wants ++ Enum.map(haves, &{&1, true}),
           timeout: :infinity
         )
+
+      Logger.debug("UPLOAD_PACK: created pack (with haves), size=#{byte_size(pack)}")
 
       cond do
         "multi_ack" in handle.caps ->
@@ -121,14 +126,19 @@ defmodule GitRekt.WireProtocol.UploadPack do
     end
   end
 
+  def next(%__MODULE__{state: :pack} = handle, lines) do
+    Logger.debug("UPLOAD_PACK: pack state with data, lines_count=#{length(lines)}, first_line=#{inspect(List.first(lines))}")
+    {handle, lines, []}
+  end
+
   def next(%__MODULE__{state: :done} = handle, []) do
     {handle, [], []}
   end
 
   @impl true
   def skip(%__MODULE__{state: :disco} = handle) do
-    advertised = GitRekt.WireProtocol.server_capabilities(@service_name)
-    %{handle | state: :upload_req, caps: [], advertised_caps: advertised}
+    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
+    %{handle | state: :upload_req, advertised_caps: advertised}
   end
 
   def skip(%__MODULE__{state: :upload_req} = handle), do: %{handle | state: :upload_haves}

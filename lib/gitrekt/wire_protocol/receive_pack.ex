@@ -55,14 +55,15 @@ defmodule GitRekt.WireProtocol.ReceivePack do
 
   @impl true
   def next(%__MODULE__{state: :disco} = handle, [:flush | lines]) do
+    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
     Logger.debug("RECEIVE_PACK disco->done: clearing caps from #{inspect(handle.caps)}")
 
-    {%{handle | state: :done, caps: []}, lines,
+    {%{handle | state: :done, caps: [], advertised_caps: advertised}, lines,
      reference_discovery(handle.agent, @service_name, handle.caps)}
   end
 
   def next(%__MODULE__{state: :disco} = handle, lines) do
-    advertised = GitRekt.WireProtocol.server_capabilities(@service_name)
+    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
     Logger.debug("RECEIVE_PACK disco->update_req: advertised_caps=#{inspect(advertised)}")
 
     {%{handle | state: :update_req, advertised_caps: advertised}, lines,
@@ -71,6 +72,10 @@ defmodule GitRekt.WireProtocol.ReceivePack do
 
   def next(%__MODULE__{state: :update_req} = handle, [:flush | lines]) do
     {%{handle | state: :done}, lines, []}
+  end
+
+  def next(%__MODULE__{state: :update_req} = handle, []) do
+    {%{handle | state: :done}, [], []}
   end
 
   def next(%__MODULE__{state: :update_req, advertised_caps: advertised_caps} = handle, lines) do
@@ -239,7 +244,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
 
   @impl true
   def skip(%__MODULE__{state: :disco, caps: caps} = handle) do
-    advertised = GitRekt.WireProtocol.server_capabilities(@service_name)
+    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ caps
 
     Logger.debug(
       "SKIP disco->update_req: caps=#{inspect(caps)}, advertised_caps=#{inspect(advertised)}"
