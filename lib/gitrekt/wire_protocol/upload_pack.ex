@@ -30,18 +30,14 @@ defmodule GitRekt.WireProtocol.UploadPack do
   #
 
   @impl true
-  def next(%__MODULE__{state: :disco} = handle, [:flush | lines]) do
-    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
-
-    {%{handle | state: :done, caps: [], advertised_caps: advertised}, lines,
-     reference_discovery(handle.agent, @service_name, handle.caps)}
-  end
-
   def next(%__MODULE__{state: :disco} = handle, lines) do
-    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
+    {new_state, remaining_lines} = case lines do
+      [:flush | rest] -> {:done, rest}
+      other -> {:upload_req, other}
+    end
 
-    {%{handle | state: :upload_req, caps: [], advertised_caps: advertised}, lines,
-     reference_discovery(handle.agent, @service_name, handle.caps)}
+    new_handle = disco_transition_state(handle, new_state)
+    {new_handle, remaining_lines, reference_discovery(new_handle.agent, @service_name, handle.caps)}
   end
 
   def next(%__MODULE__{state: :upload_req} = handle, [:flush | lines]) do
@@ -150,6 +146,12 @@ defmodule GitRekt.WireProtocol.UploadPack do
   # Helpers
   #
 
+  @doc false
+  def disco_transition_state(handle, new_state) do
+    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
+    %{handle | state: new_state, caps: [], advertised_caps: advertised}
+  end
+
   defp obj_match?({type, _oid}, type), do: true
   defp obj_match?(_line, _type), do: false
 
@@ -164,24 +166,25 @@ defmodule GitRekt.WireProtocol.UploadPack do
     end
   end
 
-  defp ack_haves([], _caps), do: []
+  def ack_haves(haves, caps) do
+    haves
+    |> Enum.with_index()
+    |> Enum.map(fn {have, idx} ->
+      is_last = idx == length(haves) - 1
+      build_ack(have, is_last, caps)
+    end)
+  end
 
-  defp ack_haves([last_have], caps) do
+  defp build_ack(have, is_last, caps) do
     cond do
-      "multi_ack" in caps -> [{:ack, last_have, :ready}]
-      "multi_ack_detailed" in caps -> [{:ack, last_have, :ready}]
-      true -> [{:ack, last_have}]
+      is_last and multi_ack?(caps) -> {:ack, have, :ready}
+      not is_last and "multi_ack" in caps -> {:ack, have, :continue}
+      not is_last and "multi_ack_detailed" in caps -> {:ack, have, :common}
+      true -> {:ack, have}
     end
   end
 
-  defp ack_haves([have | rest], caps) do
-    ack_status =
-      cond do
-        "multi_ack" in caps -> {:ack, have, :continue}
-        "multi_ack_detailed" in caps -> {:ack, have, :common}
-        true -> {:ack, have}
-      end
-
-    [ack_status | ack_haves(rest, caps)]
+  defp multi_ack?(caps) do
+    "multi_ack" in caps or "multi_ack_detailed" in caps
   end
 end
