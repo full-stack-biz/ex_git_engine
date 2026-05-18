@@ -186,9 +186,6 @@ defmodule GitRekt.WireProtocol do
   defp __type__(%{__struct__: GitRekt.WireProtocol.UploadPack}), do: :upload_pack
   defp __type__(%{__struct__: GitRekt.WireProtocol.ReceivePack}), do: :receive_pack
 
-  defp __service__(:upload_pack), do: GitRekt.WireProtocol.UploadPack
-  defp __service__(:receive_pack), do: GitRekt.WireProtocol.ReceivePack
-
   #
   # Helpers
   #
