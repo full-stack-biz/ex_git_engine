@@ -876,7 +876,7 @@ defmodule GitRekt.Git do
   Returns the *libgit2* library version.
   """
   @spec library_version() :: {integer, integer, integer}
-  def library_version() do
+  def library_version do
     :erlang.nif_error(:not_loaded)
   end
 

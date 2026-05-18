@@ -184,7 +184,12 @@ defmodule GitRekt.WireProtocol.ReceivePack do
     end
   end
 
-  @doc false
+  @doc """
+  Builds the push response output for successful operations.
+
+  Returns status tuples optionally wrapped in sideband format if the client
+  advertised support for it.
+  """
   def push_success_output(handle) do
     if "report-status" in handle.advertised_caps do
       report = report_status(handle)
@@ -199,7 +204,12 @@ defmodule GitRekt.WireProtocol.ReceivePack do
     end
   end
 
-  @doc false
+  @doc """
+  Builds the complete push response combining status and hook messages.
+
+  Assembles status output with optional hook messages, handling sideband
+  multiplexing when advertised.
+  """
   def build_push_response(handle, messages) do
     status_output = push_success_output(handle)
 
@@ -211,7 +221,11 @@ defmodule GitRekt.WireProtocol.ReceivePack do
     end
   end
 
-  @doc false
+  @doc """
+  Wraps a line with sideband framing for multiplexed transmission.
+
+  Encodes the line with the specified band number in PKT-LINE format.
+  """
   def sideband_wrap(line, band) when is_binary(line) do
     data = line <> "\n"
     size = byte_size(data) + 5
@@ -269,7 +283,12 @@ defmodule GitRekt.WireProtocol.ReceivePack do
   # Helpers
   #
 
-  @doc false
+  @doc """
+  Parses ref update commands from the client.
+
+  Converts command strings into structured tuples representing create, delete,
+  or update operations.
+  """
   def parse_cmds(cmds) do
     Enum.map(cmds, fn cmd ->
       case String.split(cmd, " ", parts: 3) do
@@ -285,7 +304,12 @@ defmodule GitRekt.WireProtocol.ReceivePack do
     end)
   end
 
-  @doc false
+  @doc """
+  Parses capabilities from the first reference line.
+
+  Extracts client capabilities from the null-delimited first ref line.
+  Returns a tuple of {capabilities, refs}.
+  """
   def parse_caps([]), do: {[], []}
 
   def parse_caps([first_ref | refs]) do
@@ -295,7 +319,11 @@ defmodule GitRekt.WireProtocol.ReceivePack do
     end
   end
 
-  @doc false
+  @doc """
+  Generates report-status response for successful ref updates.
+
+  Returns tuples indicating successful update status for each ref command.
+  """
   def report_status(%__MODULE__{caps: _caps, cmds: cmds}) do
     ref_statuses =
       Enum.map(cmds, fn cmd ->

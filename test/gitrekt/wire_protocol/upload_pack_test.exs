@@ -33,9 +33,9 @@ defmodule GitRekt.WireProtocol.UploadPackTest do
       have2 = <<2::256>>
 
       assert UploadPack.ack_haves([have1, have2], ["multi_ack"]) == [
-        {:ack, have1, :continue},
-        {:ack, have2, :ready}
-      ]
+               {:ack, have1, :continue},
+               {:ack, have2, :ready}
+             ]
     end
 
     test "multiple haves with multi_ack_detailed" do
@@ -43,9 +43,9 @@ defmodule GitRekt.WireProtocol.UploadPackTest do
       have2 = <<2::256>>
 
       assert UploadPack.ack_haves([have1, have2], ["multi_ack_detailed"]) == [
-        {:ack, have1, :common},
-        {:ack, have2, :ready}
-      ]
+               {:ack, have1, :common},
+               {:ack, have2, :ready}
+             ]
     end
 
     test "multiple haves without multi_ack" do
@@ -53,9 +53,9 @@ defmodule GitRekt.WireProtocol.UploadPackTest do
       have2 = <<2::256>>
 
       assert UploadPack.ack_haves([have1, have2], []) == [
-        {:ack, have1},
-        {:ack, have2}
-      ]
+               {:ack, have1},
+               {:ack, have2}
+             ]
     end
 
     test "three haves with multi_ack" do
@@ -64,10 +64,10 @@ defmodule GitRekt.WireProtocol.UploadPackTest do
       have3 = <<3::256>>
 
       assert UploadPack.ack_haves([have1, have2, have3], ["multi_ack"]) == [
-        {:ack, have1, :continue},
-        {:ack, have2, :continue},
-        {:ack, have3, :ready}
-      ]
+               {:ack, have1, :continue},
+               {:ack, have2, :continue},
+               {:ack, have3, :ready}
+             ]
     end
   end
 

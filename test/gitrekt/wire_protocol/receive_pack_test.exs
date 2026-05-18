@@ -1,8 +1,8 @@
 defmodule GitRekt.WireProtocol.ReceivePackTest do
   use ExUnit.Case, async: true
 
-  alias GitRekt.WireProtocol.ReceivePack
   alias GitRekt.Git
+  alias GitRekt.WireProtocol.ReceivePack
 
   describe "report_status/1" do
     test "returns tuple protocol elements" do

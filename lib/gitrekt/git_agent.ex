@@ -233,20 +233,20 @@ defmodule GitRekt.GitAgent do
 
   alias GitRekt.{
     Git,
-    GitRepo,
-    GitOdb,
-    GitCommit,
-    GitRef,
-    GitTag,
     GitBlob,
-    GitTree,
-    GitTreeEntry,
+    GitCommit,
+    GitDiff,
+    GitError,
     GitIndex,
     GitIndexEntry,
-    GitDiff,
-    GitWritePack,
+    GitOdb,
+    GitRef,
+    GitRepo,
     GitStream,
-    GitError
+    GitTag,
+    GitTree,
+    GitTreeEntry,
+    GitWritePack
   }
 
   @behaviour GitRekt.Cache
@@ -1161,12 +1161,10 @@ defmodule GitRekt.GitAgent do
   end
 
   defp call(handle, {:transaction, _name, cb}) do
-    try do
-      cb.(handle)
-    rescue
-      error ->
-        {:error, error}
-    end
+    cb.(handle)
+  rescue
+    error ->
+      {:error, error}
   end
 
   defp call(_handle, op),
