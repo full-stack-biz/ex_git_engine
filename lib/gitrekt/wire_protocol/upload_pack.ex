@@ -31,13 +31,16 @@ defmodule GitRekt.WireProtocol.UploadPack do
 
   @impl true
   def next(%__MODULE__{state: :disco} = handle, lines) do
-    {new_state, remaining_lines} = case lines do
-      [:flush | rest] -> {:done, rest}
-      other -> {:upload_req, other}
-    end
+    {new_state, remaining_lines} =
+      case lines do
+        [:flush | rest] -> {:done, rest}
+        other -> {:upload_req, other}
+      end
 
     new_handle = disco_transition_state(handle, new_state)
-    {new_handle, remaining_lines, reference_discovery(new_handle.agent, @service_name, handle.caps)}
+
+    {new_handle, remaining_lines,
+     reference_discovery(new_handle.agent, @service_name, handle.caps)}
   end
 
   def next(%__MODULE__{state: :upload_req} = handle, [:flush | lines]) do
@@ -93,7 +96,10 @@ defmodule GitRekt.WireProtocol.UploadPack do
   end
 
   def next(%__MODULE__{state: :pack} = handle, []) do
-    Logger.debug("UPLOAD_PACK: pack state with empty input, haves=#{length(handle.haves)}, wants=#{length(handle.wants)}")
+    Logger.debug(
+      "UPLOAD_PACK: pack state with empty input, haves=#{length(handle.haves)}, wants=#{length(handle.wants)}"
+    )
+
     if Enum.empty?(handle.haves) do
       {:ok, pack} = GitAgent.pack_create(handle.agent, handle.wants, timeout: :infinity)
       Logger.debug("UPLOAD_PACK: created pack (no haves), size=#{byte_size(pack)}")
@@ -118,7 +124,10 @@ defmodule GitRekt.WireProtocol.UploadPack do
   end
 
   def next(%__MODULE__{state: :pack} = handle, lines) do
-    Logger.debug("UPLOAD_PACK: pack state with data, lines_count=#{length(lines)}, first_line=#{inspect(List.first(lines))}")
+    Logger.debug(
+      "UPLOAD_PACK: pack state with data, lines_count=#{length(lines)}, first_line=#{inspect(List.first(lines))}"
+    )
+
     {handle, lines, []}
   end
 

@@ -19,6 +19,7 @@ defmodule GitRekt.WireProtocol do
   alias GitRekt.Git
   alias GitRekt.GitAgent
   alias GitRekt.GitRef
+  alias GitRekt.WireProtocol.ReceivePack
 
   @upload_caps ~w(multi_ack multi_ack_detailed no-done)
   @receive_caps ~w(report-status delete-refs ofs-delta atomic side-band-64k)
@@ -96,7 +97,7 @@ defmodule GitRekt.WireProtocol do
   Sets the given `service` to the next logical step without performing any action.
   """
   @spec skip(struct) :: struct
-  def skip(service), do: apply(service.__struct__, :skip, [service])
+  def skip(%{__struct__: module} = service), do: module.skip(service)
 
   @doc """
   Returns `true` if `service` is done; elsewise returns `false`.
@@ -152,7 +153,7 @@ defmodule GitRekt.WireProtocol do
   def pkt_line({:ng, refname, reason}), do: pkt_line("ng #{refname} #{reason}")
 
   def pkt_line({:sideband, channel, text}),
-    do: GitRekt.WireProtocol.ReceivePack.sideband_wrap(text, channel)
+    do: ReceivePack.sideband_wrap(text, channel)
 
   def pkt_line(<<"PACK", _rest::binary>> = pack), do: pack
 
@@ -172,7 +173,7 @@ defmodule GitRekt.WireProtocol do
     do: pkt_line({:sideband_report, channel, inner})
 
   def pkt_line({:sideband, channel, text}, _caps),
-    do: GitRekt.WireProtocol.ReceivePack.sideband_wrap(text, channel)
+    do: ReceivePack.sideband_wrap(text, channel)
 
   def pkt_line(:flush, _caps), do: "0000"
   def pkt_line(<<"PACK", _rest::binary>> = pack, _caps), do: pack
@@ -182,13 +183,11 @@ defmodule GitRekt.WireProtocol do
       String.pad_leading(Integer.to_string(byte_size(data) + 5, 16) |> String.downcase(), 4, "0") <>
         data <> "\n"
 
-  @doc false
-  def __type__(%{__struct__: GitRekt.WireProtocol.UploadPack}), do: :upload_pack
-  def __type__(%{__struct__: GitRekt.WireProtocol.ReceivePack}), do: :receive_pack
+  defp __type__(%{__struct__: GitRekt.WireProtocol.UploadPack}), do: :upload_pack
+  defp __type__(%{__struct__: GitRekt.WireProtocol.ReceivePack}), do: :receive_pack
 
-  @doc false
-  def __service__(:upload_pack), do: GitRekt.WireProtocol.UploadPack
-  def __service__(:receive_pack), do: GitRekt.WireProtocol.ReceivePack
+  defp __service__(:upload_pack), do: GitRekt.WireProtocol.UploadPack
+  defp __service__(:receive_pack), do: GitRekt.WireProtocol.ReceivePack
 
   #
   # Helpers
@@ -211,15 +210,21 @@ defmodule GitRekt.WireProtocol do
   end
 
   defp exec_next_state(service, lines, acc, old_state, ref, event_time) do
-    Logger.debug("EXEC_NEXT_STATE: service.state=#{service.state}, lines_count=#{length(lines)}, acc_length=#{length(acc)}")
-    case apply(service.__struct__, :next, [service, lines]) do
+    Logger.debug(
+      "EXEC_NEXT_STATE: service.state=#{service.state}, lines_count=#{length(lines)}, acc_length=#{length(acc)}"
+    )
+
+    case service.__struct__.next(service, lines) do
       {service, [], out} ->
         Logger.debug("EXEC_NEXT_STATE: got empty lines, output_length=#{length(out)}, returning")
         telemetry_stop(service, old_state, ref, event_time)
         {service, acc ++ out}
 
       {service, lines, out} ->
-        Logger.debug("EXEC_NEXT_STATE: got more lines (#{length(lines)}), output_length=#{length(out)}, recursing with new_state=#{service.state}")
+        Logger.debug(
+          "EXEC_NEXT_STATE: got more lines (#{length(lines)}), output_length=#{length(out)}, recursing with new_state=#{service.state}"
+        )
+
         telemetry_next(service, old_state, ref, event_time)
         exec_next_state(service, lines, acc ++ out, service.state, ref, event_time)
     end
@@ -276,14 +281,22 @@ defmodule GitRekt.WireProtocol do
     telemetry_start(service, service.state, ref)
   end
 
-  @doc false
+  @doc """
+  Returns the agent capability string for gitrekt.
+  """
   def server_agent_capability, do: "agent=gitrekt/#{Application.spec(:gitrekt, :vsn)}"
 
-  @doc false
+  @doc """
+  Returns the list of server capabilities for the given service.
+  """
   def server_capabilities("git-receive-pack"), do: [server_agent_capability() | @receive_caps]
   def server_capabilities("git-upload-pack"), do: [server_agent_capability() | @upload_caps]
 
-  @doc false
+  @doc """
+  Validates client capabilities against advertised capabilities.
+
+  Returns a list of unknown capabilities requested by the client.
+  """
   def validate_capabilities(client_caps, advertised_caps) do
     Enum.reject(client_caps, fn cap ->
       cond do
