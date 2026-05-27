@@ -309,7 +309,7 @@ defmodule GitRekt.Git do
 
   @doc false
   def load_nif do
-    case :erlang.load_nif(nif_path(), 0) do
+    case :erlang.load_nif(nif_path() |> to_charlist(), 0) do
       :ok -> :ok
       {:error, {:load_failed, error}} -> raise RuntimeError, message: error
     end
@@ -530,7 +530,8 @@ defmodule GitRekt.Git do
   @doc """
   Returns the number of unique commits between two commit objects.
   """
-  @spec graph_ahead_behind(repo, oid, oid) :: {:ok, non_neg_integer, non_neg_integer}
+  @spec graph_ahead_behind(repo, oid, oid) ::
+          {:ok, non_neg_integer, non_neg_integer} | {:error, term}
   def graph_ahead_behind(_repo, _local, _upstream) do
     :erlang.nif_error(:not_loaded)
   end
@@ -556,7 +557,7 @@ defmodule GitRekt.Git do
   @doc """
   Return the uncompressed, raw data of an ODB object.
   """
-  @spec odb_read(odb, oid) :: {:ok, obj_type, binary}
+  @spec odb_read(odb, oid) :: {:ok, obj_type, binary} | {:error, term}
   def odb_read(_odb, _oid) do
     :erlang.nif_error(:not_loaded)
   end
@@ -588,7 +589,8 @@ defmodule GitRekt.Git do
   @doc """
   Appends the given `data` to the `odb_writepack`.
   """
-  @spec odb_writepack_append(odb_writepack, binary, indexer_progress) :: :ok | {:error, term}
+  @spec odb_writepack_append(odb_writepack, binary, odb_writepack_progress) ::
+          {:ok, odb_writepack_progress} | {:error, term}
   def odb_writepack_append(_odb_writepack, _data, _progress) do
     :erlang.nif_error(:not_loaded)
   end
@@ -596,7 +598,7 @@ defmodule GitRekt.Git do
   @doc """
   Commits the written data to the `odb_writepack`.
   """
-  @spec odb_writepack_commit(odb_writepack, indexer_progress) :: :ok | {:error, term}
+  @spec odb_writepack_commit(odb_writepack, odb_writepack_progress) :: :ok | {:error, term}
   def odb_writepack_commit(_odb_writepack, _progress) do
     :erlang.nif_error(:not_loaded)
   end
@@ -931,9 +933,9 @@ defmodule GitRekt.Git do
   @doc """
   Returns a stream for the given revision `walk`.
   """
-  @spec revwalk_stream(revwalk) :: {:ok, Enumerable.t()} | {:error, term}
+  @spec revwalk_stream(revwalk) :: {:ok, GitStream.t()} | {:error, term}
   def revwalk_stream(walk) do
-    {:ok, GitStream.new(walk, &revwalk_stream_next/1)}
+    {:ok, GitStream.new(walk, walk, &revwalk_stream_next/1)}
   end
 
   @doc """

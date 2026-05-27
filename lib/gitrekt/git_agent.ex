@@ -801,6 +801,7 @@ defmodule GitRekt.GitAgent do
   # Helpers
   #
 
+  @dialyzer {:no_match, exec: 3}
   defp exec(agent, op, opts) when is_pid(agent),
     do:
       telemetry(
@@ -1163,8 +1164,8 @@ defmodule GitRekt.GitAgent do
   defp call(handle, {:transaction, _name, cb}) do
     cb.(handle)
   rescue
-    error ->
-      {:error, error}
+    e in [RuntimeError, ErlangError, MatchError, CaseClauseError] ->
+      {:error, e}
   end
 
   defp call(_handle, op),
@@ -1677,19 +1678,23 @@ defmodule GitRekt.GitAgent do
   defp fetch_author(%GitCommit{__ref__: commit}) do
     with {:ok, name, email, time, _offset} <- Git.commit_author(commit),
          {:ok, datetime} <- DateTime.from_unix(time),
-         do: {:ok, %{name: name, email: email, timestamp: datetime}}
+         do: {:ok, build_signature(name, email, datetime)}
   end
 
   defp fetch_author(%GitTag{__ref__: tag}) do
     with {:ok, name, email, time, _offset} <- Git.tag_author(tag),
          {:ok, datetime} <- DateTime.from_unix(time),
-         do: {:ok, %{name: name, email: email, timestamp: datetime}}
+         do: {:ok, build_signature(name, email, datetime)}
   end
 
   defp fetch_committer(%GitCommit{__ref__: commit}) do
     with {:ok, name, email, time, _offset} <- Git.commit_committer(commit),
          {:ok, datetime} <- DateTime.from_unix(time),
-         do: {:ok, %{name: name, email: email, timestamp: datetime}}
+         do: {:ok, build_signature(name, email, datetime)}
+  end
+
+  defp build_signature(name, email, timestamp) do
+    %{name: name, email: email, timestamp: timestamp}
   end
 
   defp fetch_message(%GitCommit{__ref__: commit}), do: Git.commit_message(commit)
@@ -1761,8 +1766,8 @@ defmodule GitRekt.GitAgent do
     end)
   end
 
-  defp signature_tuple(%{name: name, email: email, timestamp: datetime}) do
-    {name, email, DateTime.to_unix(datetime), datetime.utc_offset}
+  defp signature_tuple(sig) do
+    {sig.name, sig.email, DateTime.to_unix(sig.timestamp), sig.timestamp.utc_offset}
   end
 
   defp walk_insert(_walk, []), do: :ok
