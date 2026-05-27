@@ -11,6 +11,7 @@ defprotocol GitRekt.GitRepo do
   @doc """
   Returns the agent for the given `repo`.
   """
+  @fallback_to_any true
   @spec get_agent(t) :: {:ok, GitAgent.agent()} | {:error, term}
   def get_agent(repo)
 

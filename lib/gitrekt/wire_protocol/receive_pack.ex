@@ -45,7 +45,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
           caps: [binary],
           cmds: [cmd],
           repo: GitRepo.t(),
-          writepack: GitWritePack.t(),
+          writepack: GitRekt.GitWritePack.t(),
           writepack_progress: Git.odb_writepack_progress()
         }
 
@@ -155,6 +155,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
     end
   end
 
+  @dialyzer {:no_match, handle_push_cmds: 1}
   defp handle_push_cmds(handle) do
     with :ok <- push_pack(handle.agent, handle.writepack, handle.writepack_progress),
          :ok <- GitRepo.pre_push(handle.repo, handle.cmds),

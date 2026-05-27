@@ -27,7 +27,7 @@ defmodule GitRekt.WireProtocol do
   @doc """
   Callback used to transist a service to the next step.
   """
-  @callback next(struct, [term]) :: {struct, [term]}
+  @callback next(struct, [term]) :: {struct, [term], iolist}
 
   @doc """
   Callback used to transist a service to the next step without performing any action.
@@ -133,7 +133,18 @@ defmodule GitRekt.WireProtocol do
   @doc """
   Returns the given `data` formatted as *PKT-LINE*
   """
-  @spec pkt_line(:flush | {:ack, Git.oid()} | {:ack, Git.oid(), binary} | :nak | binary) :: binary
+  @spec pkt_line(
+          :flush
+          | {:ack, Git.oid()}
+          | {:ack, Git.oid(), binary}
+          | :nak
+          | binary
+          | {:sideband_report, integer, [term]}
+          | {:sideband, integer, binary}
+          | {:unpack, binary}
+          | {:ok, binary}
+          | {:ng, binary, binary}
+        ) :: binary
   def pkt_line(data \\ :flush)
 
   def pkt_line(:flush), do: "0000"
@@ -251,7 +262,7 @@ defmodule GitRekt.WireProtocol do
   defp exec_impl("git-upload-pack"), do: GitRekt.WireProtocol.UploadPack
   defp exec_impl("git-receive-pack"), do: GitRekt.WireProtocol.ReceivePack
 
-  defp telemetry_start(_service, state, _ref) when state == :buffer, do: :ok
+  defp telemetry_start(_service, :buffer, _ref), do: :ok
 
   defp telemetry_start(service, state, ref) do
     :telemetry.execute([:gitrekt, :wire_protocol, :start], %{}, %{
@@ -261,7 +272,7 @@ defmodule GitRekt.WireProtocol do
     })
   end
 
-  defp telemetry_stop(_service, state, _ref, _event_time) when state == :buffer, do: :ok
+  defp telemetry_stop(_service, :buffer, _ref, _event_time), do: :ok
 
   defp telemetry_stop(service, state, ref, event_time) do
     :telemetry.execute(

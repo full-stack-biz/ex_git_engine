@@ -10,8 +10,9 @@ defmodule GitRekt.GitStream do
   @doc """
   Creates a new stream.
   """
-  @spec new(reference, term, (Stream.acc() ->
-                                {[Stream.element()], Stream.acc()} | {:halt, Stream.acc()})) :: t
+  @spec new(reference | nil, term, (Stream.acc() ->
+                                      {[Stream.element()], Stream.acc()} | {:halt, Stream.acc()})) ::
+          t
   def new(resource \\ nil, acc, next_fun) do
     %__MODULE__{
       enum: Stream.resource(fn -> acc end, next_fun, &after_fun/1),
