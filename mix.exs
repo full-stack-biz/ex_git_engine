@@ -13,12 +13,19 @@ defmodule GitRekt.Mixfile do
       compilers: [:elixir_make] ++ Mix.compilers(),
       make_args: ["--quiet"],
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      aliases: aliases()
     ]
   end
 
   def application do
     [extra_applications: [:logger]]
+  end
+
+  def cli do
+    [
+      preferred_envs: [ci: :test]
+    ]
   end
 
   #
@@ -27,12 +34,29 @@ defmodule GitRekt.Mixfile do
 
   defp deps do
     [
+      {:reach, "~> 2.0", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
+      {:vibe_kit, "~> 0.1"},
       {:elixir_make, "~> 0.6"},
       {:stream_split, "~> 0.1"},
       {:telemetry, "~> 1.1"},
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:ex_dna, "~> 1.1", only: [:dev, :test], runtime: false},
-      {:ex_slop, "~> 0.3", only: [:dev, :test], runtime: false}
+      {:credo, "~> 1.0", only: [:dev, :test], runtime: false},
+      {:ex_dna, "~> 1.0", only: [:dev, :test], runtime: false},
+      {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false}
+    ]
+  end
+
+  defp aliases() do
+    [
+      ci: [
+        "compile --warnings-as-errors",
+        "format --check-formatted",
+        "test",
+        "credo --strict",
+        "dialyzer",
+        "ex_dna --max-clones 0",
+        "reach.check --arch --smells"
+      ]
     ]
   end
 end
