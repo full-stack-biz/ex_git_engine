@@ -67,7 +67,9 @@ defmodule GitRekt.WireProtocol do
   @doc """
   Runs the given `service` to the next step.
   """
-  @spec next(struct, binary | :discovery) :: {:cont | :halt, struct, iolist}
+  @spec next(struct) :: {struct, iolist}
+  @spec next(struct, :discovery) :: {struct, iolist}
+  @spec next(struct, binary) :: {:cont | :halt, struct, iolist}
   def next(service, data \\ :discovery)
 
   def next(service, :discovery) do
