@@ -7,7 +7,6 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
   describe "report_status/1" do
     test "returns tuple protocol elements" do
       handle = %ReceivePack{
-        caps: ["report-status"],
         cmds: [
           {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"}
         ]
@@ -21,7 +20,6 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
 
     test "includes all command refs as tuples" do
       handle = %ReceivePack{
-        caps: ["report-status"],
         cmds: [
           {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"},
           {:update, Git.oid_parse("0000000000000000000000000000000000000001"),
@@ -40,7 +38,6 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
 
     test "does not include flush (added by response builders)" do
       handle = %ReceivePack{
-        caps: ["report-status"],
         cmds: [
           {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"}
         ]
@@ -193,13 +190,10 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
 
   describe "state transitions" do
     test "disco->update_req on data includes full server capabilities" do
-      # Test disco->update_req state by just checking the state logic, not next/2
-      # which requires a full repo setup
-      handle = %ReceivePack{state: :disco, caps: ["report-status"], advertised_caps: []}
+      handle = %ReceivePack{state: :disco, advertised_caps: []}
       new_handle = ReceivePack.skip(handle)
 
       assert new_handle.state == :update_req
-      # After the fix, advertised_caps includes full server caps + init caps
       assert "report-status" in new_handle.advertised_caps
       assert "delete-refs" in new_handle.advertised_caps
       assert "ofs-delta" in new_handle.advertised_caps
@@ -207,7 +201,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     end
 
     test "skip transitions through all states correctly" do
-      disco_handle = %ReceivePack{state: :disco, caps: [], advertised_caps: []}
+      disco_handle = %ReceivePack{state: :disco, advertised_caps: []}
       update_req_handle = ReceivePack.skip(disco_handle)
       assert update_req_handle.state == :update_req
 
@@ -217,7 +211,6 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
       done_handle = ReceivePack.skip(pack_handle)
       assert done_handle.state == :done
 
-      # Further skips on done state should remain in done
       still_done = ReceivePack.skip(done_handle)
       assert still_done.state == :done
     end
@@ -400,53 +393,43 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
   end
 
   describe "skip/1 advertised_caps conformance" do
-    test "skip from disco state includes server capabilities + init caps" do
-      # Simulate HTTP path: new/3 receives caps: ["report-status"]
-      handle = %ReceivePack{state: :disco, caps: ["report-status"], advertised_caps: []}
+    test "skip from disco state includes full server capabilities" do
+      handle = %ReceivePack{state: :disco, advertised_caps: []}
       new_handle = ReceivePack.skip(handle)
 
       assert new_handle.state == :update_req
-      # advertised_caps should include full server caps + init caps
       assert "report-status" in new_handle.advertised_caps
       assert "delete-refs" in new_handle.advertised_caps
       assert "ofs-delta" in new_handle.advertised_caps
       assert "atomic" in new_handle.advertised_caps
-      # And should include the agent capability
       assert Enum.any?(new_handle.advertised_caps, &String.starts_with?(&1, "agent="))
-    end
-
-    test "skip from disco state with empty init caps includes full server capabilities" do
-      # Simulate SSH path: no init caps
-      handle = %ReceivePack{state: :disco, caps: [], advertised_caps: []}
-      new_handle = ReceivePack.skip(handle)
-
-      assert new_handle.state == :update_req
-      # Should have full server capabilities
-      assert "report-status" in new_handle.advertised_caps
-      assert "delete-refs" in new_handle.advertised_caps
-      assert "ofs-delta" in new_handle.advertised_caps
-      assert "atomic" in new_handle.advertised_caps
     end
 
     test "skip disco->update_req sets advertised_caps to server capabilities" do
       advertised_server = GitRekt.WireProtocol.server_capabilities("git-receive-pack")
 
-      handle = %ReceivePack{state: :disco, caps: [], advertised_caps: []}
+      handle = %ReceivePack{state: :disco, advertised_caps: []}
       skipped = ReceivePack.skip(handle)
 
-      # skip() sets advertised_caps to server capabilities
       assert skipped.advertised_caps == advertised_server
       assert skipped.state == :update_req
+    end
+
+    test "report-status appears exactly once" do
+      handle = %ReceivePack{state: :disco, advertised_caps: []}
+      skipped = ReceivePack.skip(handle)
+
+      count = Enum.count(skipped.advertised_caps, &(&1 == "report-status"))
+      assert count == 1, "report-status advertised #{count} times, expected 1"
     end
   end
 
   describe "done handler idempotency" do
     test "done handler with empty cmds is a no-op" do
-      # Calling done handler with no cmds should not push anything
       handle = %ReceivePack{
         state: :done,
         cmds: [],
-        caps: ["report-status"],
+        client_caps: ["report-status"],
         agent: nil,
         writepack: nil,
         writepack_progress: %{},
@@ -550,7 +533,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     test "push_success_output without sideband produces status tuples (no flush)" do
       handle = %ReceivePack{
         advertised_caps: ["report-status"],
-        caps: [],
+        client_caps: [],
         cmds: [
           {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"}
         ]
@@ -565,7 +548,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     test "build_push_response without sideband: status + string messages + flush" do
       handle = %ReceivePack{
         advertised_caps: ["report-status"],
-        caps: [],
+        client_caps: [],
         cmds: [
           {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"}
         ]
@@ -584,7 +567,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     test "push_success_output returns sideband_report tuple wrapping inner status + flush" do
       handle = %ReceivePack{
         advertised_caps: ["report-status", "side-band-64k"],
-        caps: ["side-band-64k"],
+        client_caps: ["side-band-64k"],
         cmds: [
           {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"}
         ]
@@ -598,7 +581,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     test "build_push_response with sideband: sideband_report + ch2 messages + flush" do
       handle = %ReceivePack{
         advertised_caps: ["report-status", "side-band-64k"],
-        caps: ["side-band-64k"],
+        client_caps: ["side-band-64k"],
         cmds: [
           {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"}
         ]
@@ -618,7 +601,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     test "report-status returns protocol tuples" do
       handle = %ReceivePack{
         advertised_caps: ["report-status"],
-        caps: [],
+        client_caps: [],
         cmds: [
           {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"}
         ]
