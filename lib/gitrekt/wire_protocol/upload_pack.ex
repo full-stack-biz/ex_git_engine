@@ -14,11 +14,12 @@ defmodule GitRekt.WireProtocol.UploadPack do
 
   @service_name "git-upload-pack"
 
-  defstruct [:agent, state: :disco, caps: [], advertised_caps: [], wants: [], haves: []]
+  defstruct [:agent, state: :disco, no_done: false, caps: [], advertised_caps: [], wants: [], haves: []]
 
   @type t :: %__MODULE__{
           agent: GitAgent.agent(),
           state: :disco | :upload_req | :upload_haves | :pack | :done,
+          no_done: boolean,
           caps: [binary],
           advertised_caps: [binary],
           wants: [Git.oid()],
@@ -40,7 +41,7 @@ defmodule GitRekt.WireProtocol.UploadPack do
     new_handle = disco_transition_state(handle, new_state)
 
     {new_handle, remaining_lines,
-     reference_discovery(new_handle.agent, @service_name, handle.caps)}
+     reference_discovery(new_handle.agent, @service_name, if(handle.no_done, do: ["no-done"], else: []))}
   end
 
   def next(%__MODULE__{state: :upload_req} = handle, [:flush | lines]) do
@@ -137,7 +138,7 @@ defmodule GitRekt.WireProtocol.UploadPack do
 
   @impl true
   def skip(%__MODULE__{state: :disco} = handle) do
-    %{handle | state: :upload_req, advertised_caps: build_advertised_caps(handle.caps)}
+    %{handle | state: :upload_req, advertised_caps: build_advertised_caps(handle.no_done)}
   end
 
   def skip(%__MODULE__{state: :upload_req} = handle), do: %{handle | state: :upload_haves}
@@ -151,11 +152,12 @@ defmodule GitRekt.WireProtocol.UploadPack do
 
   @doc false
   def disco_transition_state(handle, new_state) do
-    %{handle | state: new_state, caps: [], advertised_caps: build_advertised_caps(handle.caps)}
+    %{handle | state: new_state, caps: [], advertised_caps: build_advertised_caps(handle.no_done)}
   end
 
-  defp build_advertised_caps(caps) do
-    GitRekt.WireProtocol.server_capabilities(@service_name) ++ caps
+  defp build_advertised_caps(no_done) do
+    base = GitRekt.WireProtocol.server_capabilities(@service_name)
+    if no_done, do: base ++ ["no-done"], else: base
   end
 
   defp obj_match?({type, _oid}, type), do: true

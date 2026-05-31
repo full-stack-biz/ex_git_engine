@@ -19,7 +19,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
 
   defstruct agent: nil,
             state: :disco,
-            caps: [],
+            client_caps: [],
             advertised_caps: [],
             cmds: [],
             repo: nil,
@@ -42,7 +42,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
   @type t :: %__MODULE__{
           agent: GitAgent.agent(),
           state: :disco | :update_req | :pack | :buffer | :done,
-          caps: [binary],
+          client_caps: [binary],
           cmds: [cmd],
           repo: GitRepo.t(),
           writepack: GitRekt.GitWritePack.t(),
@@ -55,19 +55,19 @@ defmodule GitRekt.WireProtocol.ReceivePack do
 
   @impl true
   def next(%__MODULE__{state: :disco} = handle, [:flush | lines]) do
-    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
-    Logger.debug("RECEIVE_PACK disco->done: clearing caps from #{inspect(handle.caps)}")
+    advertised = GitRekt.WireProtocol.server_capabilities(@service_name)
+    Logger.debug("RECEIVE_PACK disco->done")
 
-    {%{handle | state: :done, caps: [], advertised_caps: advertised}, lines,
-     reference_discovery(handle.agent, @service_name, handle.caps)}
+    {%{handle | state: :done, advertised_caps: advertised}, lines,
+     reference_discovery(handle.agent, @service_name, [])}
   end
 
   def next(%__MODULE__{state: :disco} = handle, lines) do
-    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ handle.caps
+    advertised = GitRekt.WireProtocol.server_capabilities(@service_name)
     Logger.debug("RECEIVE_PACK disco->update_req: advertised_caps=#{inspect(advertised)}")
 
     {%{handle | state: :update_req, advertised_caps: advertised}, lines,
-     reference_discovery(handle.agent, @service_name, handle.caps)}
+     reference_discovery(handle.agent, @service_name, [])}
   end
 
   def next(%__MODULE__{state: :update_req} = handle, [:flush | lines]) do
@@ -110,8 +110,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
         {%{
            handle
            | state: state,
-             caps: caps,
-             advertised_caps: advertised_caps || caps,
+             client_caps: caps,
              cmds: parsed_cmds,
              writepack: writepack
          }, lines, []}
@@ -128,10 +127,9 @@ defmodule GitRekt.WireProtocol.ReceivePack do
            pack_data,
            handle.writepack_progress
          ) do
-      {:ok, progress} when progress.received_objects == progress.total_objects ->
-        {%{handle | state: :done, writepack_progress: progress}, [], []}
-
       {:ok, progress} ->
+        # Always defer to EOF before finalising — the 20-byte pack SHA1 trailer
+        # may arrive in a separate SSH DATA message when the pack is fragmented.
         {%{handle | state: :buffer, writepack_progress: progress}, [], []}
 
       {:error, error} ->
@@ -141,6 +139,13 @@ defmodule GitRekt.WireProtocol.ReceivePack do
 
   def next(%__MODULE__{state: :pack} = handle, []) do
     {%{handle | state: :done}, [], []}
+  end
+
+  # EOF signal: all pack data (including the trailing SHA1) has been received.
+  # Finalise directly from here so the report-status output reaches the caller
+  # (the WireProtocol discovery path does not invoke exec_after).
+  def next(%__MODULE__{state: :buffer} = handle, []) do
+    handle_push_cmds(%{handle | state: :done})
   end
 
   def next(%__MODULE__{state: :buffer} = handle, pack_data) do
@@ -195,7 +200,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
     if "report-status" in handle.advertised_caps do
       report = report_status(handle)
 
-      if "side-band-64k" in handle.caps do
+      if "side-band-64k" in handle.client_caps do
         [{:sideband_report, 1, report ++ [:flush]}]
       else
         report
@@ -214,7 +219,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
   def build_push_response(handle, messages) do
     status_output = push_success_output(handle)
 
-    if "side-band-64k" in handle.caps do
+    if "side-band-64k" in handle.client_caps do
       hook_output = Enum.map(messages, fn msg -> {:sideband, 2, msg} end)
       status_output ++ hook_output ++ [:flush]
     else
@@ -247,7 +252,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
 
       report = [{:unpack, error_msg}] ++ cmd_rejections
 
-      if "side-band-64k" in handle.caps do
+      if "side-band-64k" in handle.client_caps do
         [{:sideband_report, 1, report ++ [:flush]}]
       else
         report
@@ -258,23 +263,19 @@ defmodule GitRekt.WireProtocol.ReceivePack do
   end
 
   @impl true
-  def skip(%__MODULE__{state: :disco, caps: caps} = handle) do
-    advertised = GitRekt.WireProtocol.server_capabilities(@service_name) ++ caps
-
-    Logger.debug(
-      "SKIP disco->update_req: caps=#{inspect(caps)}, advertised_caps=#{inspect(advertised)}"
-    )
-
+  def skip(%__MODULE__{state: :disco} = handle) do
+    advertised = GitRekt.WireProtocol.server_capabilities(@service_name)
+    Logger.debug("SKIP disco->update_req: advertised_caps=#{inspect(advertised)}")
     %{handle | state: :update_req, advertised_caps: advertised}
   end
 
-  def skip(%__MODULE__{state: :update_req, caps: caps} = handle) do
-    Logger.debug("SKIP update_req->pack: caps=#{inspect(caps)}")
+  def skip(%__MODULE__{state: :update_req, client_caps: client_caps} = handle) do
+    Logger.debug("SKIP update_req->pack: client_caps=#{inspect(client_caps)}")
     %{handle | state: :pack}
   end
 
-  def skip(%__MODULE__{state: :pack, caps: caps} = handle) do
-    Logger.debug("SKIP pack->done: caps=#{inspect(caps)}")
+  def skip(%__MODULE__{state: :pack, client_caps: client_caps} = handle) do
+    Logger.debug("SKIP pack->done: client_caps=#{inspect(client_caps)}")
     %{handle | state: :done}
   end
 
@@ -325,7 +326,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
 
   Returns tuples indicating successful update status for each ref command.
   """
-  def report_status(%__MODULE__{caps: _caps, cmds: cmds}) do
+  def report_status(%__MODULE__{cmds: cmds}) do
     ref_statuses =
       Enum.map(cmds, fn cmd ->
         refname = elem(cmd, :erlang.tuple_size(cmd) - 1)

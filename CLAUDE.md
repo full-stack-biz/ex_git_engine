@@ -159,6 +159,53 @@ assert [
 - All response tuples flow through `WireProtocol.encode/1` exactly once for PKT-LINE framing
 - Use exact pattern matching in tests, not `Enum.any?` or loose assertions
 
+## WireProtocol ReceivePack State Machine
+
+### States
+
+`:disco` → `:update_req` → `:pack` → `:buffer` → `:done`
+
+The `:buffer` state exists to handle **pack fragmentation**: libgit2's `odb_writepack_append` may report `received_objects == total_objects` (pack appears complete) before the 20-byte SHA1 trailer has arrived in a separate transport message. Committing the writepack at that point causes a "missing trailer at the end of the pack" error. The fix: always transition `:pack` → `:buffer` after `odb_writepack_append`, and defer `odb_writepack_commit` to EOF.
+
+### Two Execution Paths Through `:buffer`
+
+The WireProtocol has two distinct callers that reach `:buffer` differently:
+
+**SSH path** — `WireProtocol.next(service, binary_data)` called per DATA message:
+1. First DATA message: `:pack` state → `odb_writepack_append` → `:buffer`
+2. Additional DATA messages (fragmented pack): `:buffer` + non-empty binary → `next(:buffer, binary)` → wraps as `{:pack, binary}` → recurses to `:pack` → append → back to `:buffer`
+3. EOF (`WireProtocol.next(service, :discovery)` from SSH EOF handler): `:buffer` + `[]` → `next(:buffer, [])` → `handle_push_cmds` → `odb_writepack_commit` → push
+
+**HTTP path** — `WireProtocol.run(service, body)` which calls `exec_all`:
+1. `exec_all` processes complete decoded body in one pass: `:disco` → `:update_req` → `:pack` → `odb_writepack_append` → `:buffer`
+2. `exec_all` recurses with `[]`: `:buffer` + `[]` → `next(:buffer, [])` → `handle_push_cmds`
+3. After the chunked HTTP body is consumed, `SmartHTTPBackend` reads the remainder, gets `""` (empty binary), and calls `WireProtocol.next(service_buffer, "")` — this **must** be treated as EOF, not as pack data
+
+### Critical: Empty Binary `""` Means EOF in `:buffer` State
+
+In `WireProtocol.next/2`, when `service.state == :buffer`:
+- `data == ""` → convert to `[]` before calling `exec_next` → triggers `next(:buffer, [])` → `handle_push_cmds`
+- `data` is non-empty binary → pass directly to `exec_next` → `next(:buffer, data)` handles SSH fragment
+
+**Do not** pass `""` directly to `exec_next` — it will fall through to `next(:buffer, pack_data)` and attempt `odb_writepack_append(agent, writepack, "")`, which fails.
+
+### Debug Logging Safety
+
+`Logger.debug` in `exec_next_state` calls `length(lines)`. If `lines` is a binary (can happen in `:buffer` + SSH fragment path), `length/1` raises `ArgumentError`. Always use a lambda form and guard on type:
+
+```elixir
+Logger.debug(fn ->
+  lines_info = if is_list(lines), do: length(lines), else: "binary(#{byte_size(lines)})"
+  "... lines_count=#{lines_info} ..."
+end)
+```
+
+### `exec_all` vs `exec_next` / `exec_after`
+
+- `exec_all` (used by `run`): recursively processes all states until `:done`; used by HTTP
+- `exec_next` + `exec_after` (used by `next/2`): processes one step, returns `:cont` or `:halt`; used by SSH per-message
+- `exec_after` checks `service.state == :done` and calls `exec_next(service, [])` once more to flush any pending output
+
 ## Git Protocol Debugging
 
 When implementing Git wire protocol features, validating capability negotiation, or debugging push/fetch protocol issues, use `/git-spec-explorer`.

@@ -19,6 +19,7 @@ Sources:
 - [Common HTTP Issues](#common-http-issues)
 - [HTTP Redirects](#http-redirects)
 - [Protocol Version Negotiation](#protocol-version-negotiation)
+- [HTTP Pack Body Delivery and EOF Signalling](#http-pack-body-delivery-and-eof-signalling)
 - [GitRekt HTTP Transport Implementation](#gitrekt-http-transport-implementation)
 
 ---
@@ -376,6 +377,30 @@ HTTP/1.1 200 OK
 ```
 
 Protocol v2 uses different capability naming and negotiation, but the fundamental flows are similar.
+
+---
+
+## HTTP Pack Body Delivery and EOF Signalling
+
+### Pack Arrives as Complete Body
+
+Unlike SSH (where pack data arrives in multiple DATA messages), HTTP delivers the complete push body in one logical request. `WireProtocol.run(service, body)` is called with the full decoded body; `exec_all` processes all states in a single pass: `:disco` → `:update_req` → `:pack` → `:buffer` → `handle_push_cmds`.
+
+### Chunked Body Reading and the Empty-Body EOF Signal
+
+`SmartHTTPBackend` reads the request body in a streaming loop. After consuming the entire pack, subsequent reads return `""` (empty binary). At that point the service is in `:buffer` state, and `WireProtocol.next(service, "")` is called.
+
+**Critical**: An empty binary `""` in `:buffer` state is an EOF signal, not a data chunk. It must be converted to `[]` before passing to `exec_next`, which triggers `next(:buffer, [])` → `handle_push_cmds` → `odb_writepack_commit`.
+
+Passing `""` directly to `exec_next` causes `next(:buffer, pack_data)` to match (since `""` is not `[]`), which wraps it as `{:pack, ""}` and calls `odb_writepack_append(agent, writepack, "")`, which fails.
+
+The guard in `WireProtocol.next/2`:
+```elixir
+if service.state == :buffer do
+  lines = if data == "", do: [], else: data  # "" = EOF, non-empty binary = SSH fragment
+  ...
+end
+```
 
 ---
 

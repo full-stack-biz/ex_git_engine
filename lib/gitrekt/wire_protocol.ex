@@ -21,7 +21,7 @@ defmodule GitRekt.WireProtocol do
   alias GitRekt.GitRef
   alias GitRekt.WireProtocol.ReceivePack
 
-  @upload_caps ~w(multi_ack multi_ack_detailed no-done)
+  @upload_caps ~w(multi_ack multi_ack_detailed)
   @receive_caps ~w(report-status delete-refs ofs-delta atomic side-band-64k)
 
   @doc """
@@ -74,12 +74,15 @@ defmodule GitRekt.WireProtocol do
 
   def next(service, :discovery) do
     {service, lines} = exec_next(service, [])
-    {service, encode(lines, service.caps)}
+    {service, encode(lines)}
   end
 
   def next(service, data) do
     if service.state == :buffer do
-      {service, lines} = exec_next(service, data)
+      # Empty binary is an EOF signal (HTTP reads empty remainder after pack body).
+      # Non-empty binary is an additional SSH DATA fragment to append.
+      lines = if data == "", do: [], else: data
+      {service, lines} = exec_next(service, lines)
       exec_after(service, lines)
     else
       {service, lines} = exec_next(service, Enum.to_list(decode(data)))
@@ -220,9 +223,10 @@ defmodule GitRekt.WireProtocol do
   end
 
   defp exec_next_state(service, lines, acc, old_state, ref, event_time) do
-    Logger.debug(
-      "EXEC_NEXT_STATE: service.state=#{service.state}, lines_count=#{length(lines)}, acc_length=#{length(acc)}"
-    )
+    Logger.debug(fn ->
+      lines_info = if is_list(lines), do: length(lines), else: "binary(#{byte_size(lines)})"
+      "EXEC_NEXT_STATE: service.state=#{service.state}, lines_count=#{lines_info}, acc_length=#{length(acc)}"
+    end)
 
     case service.__struct__.next(service, lines) do
       {service, [], out} ->
@@ -243,9 +247,9 @@ defmodule GitRekt.WireProtocol do
   defp exec_after(service, lines) do
     if service.state == :done do
       {service, lines} = exec_next(service, [], lines)
-      {:halt, service, encode(lines, service.caps)}
+      {:halt, service, encode(lines)}
     else
-      {:cont, service, encode(lines, service.caps)}
+      {:cont, service, encode(lines)}
     end
   end
 

@@ -20,6 +20,7 @@ Sources:
 - [SSH Error Handling](#ssh-error-handling)
 - [SSH Debugging](#ssh-debugging)
 - [Common SSH Issues](#common-ssh-issues)
+- [Pack Fragmentation Over SSH](#pack-fragmentation-over-ssh)
 - [GitRekt SSH Implementation](#gitrekt-ssh-implementation)
 
 ---
@@ -424,6 +425,49 @@ If push works over HTTP but fails over SSH:
 | "Connection closed by remote host" | Server crashed or hung | Check server logs, try again |
 | "Timeout" | Network issue or service hung | Check connectivity, service logs |
 | "unpack error" then refs appear | Report-status capability issue (same as HTTP) | Check if client requested it |
+
+---
+
+## Pack Fragmentation Over SSH
+
+### The Problem
+
+Git pack data may arrive in multiple SSH DATA messages. A single SSH DATA message contains a chunk of the packfile — not necessarily aligned to any pack boundary. In particular, the 20-byte SHA1 trailer at the end of a packfile may arrive in a separate SSH DATA message after the first message already made libgit2 report the pack as "complete" (`received_objects == total_objects`).
+
+**Do not call `odb_writepack_commit` when `received_objects == total_objects` is first seen.** libgit2 may internally mark the pack as complete at that point, but the 20-byte trailing SHA1 checksum may not yet have been received over the wire. Committing early causes:
+```
+fatal: missing trailer at the end of the pack
+```
+
+### The Solution: Defer to EOF
+
+After every `odb_writepack_append` call (regardless of whether it reports complete), transition to `:buffer` state and wait for EOF before calling `odb_writepack_commit`. The EOF signal arrives via the SSH EOF message, which triggers `WireProtocol.next(service, :discovery)`.
+
+**SSHserver EOF handler** (in gitleaf):
+```elixir
+def handle_ssh_msg({:ssh_cm, conn, {:eof, chan}}, %__MODULE__{service: service} = state) do
+  if service do
+    {_new_service, output} = WireProtocol.next(service, :discovery)
+    :ssh_connection.send(conn, chan, output)
+  end
+  :ssh_connection.exit_status(conn, chan, 0)
+  :ssh_connection.close(conn, chan)
+  {:ok, state}
+end
+```
+
+The `:discovery` path calls `exec_next(service, [])`, which triggers `next(:buffer, [])` → `handle_push_cmds` → `odb_writepack_commit`.
+
+### SSH DATA vs SSH EOF in the State Machine
+
+```
+SSH DATA #1  → WireProtocol.next(service, data1) → :pack → odb_writepack_append → :buffer → {:cont, ...}
+SSH DATA #2  → WireProtocol.next(service, data2) → :buffer + binary → :pack → append → :buffer → {:cont, ...}
+  (repeat for any additional fragments)
+SSH EOF      → WireProtocol.next(service, :discovery) → :buffer + [] → handle_push_cmds → {:halt, output}
+```
+
+The output (report-status, sideband messages) from `handle_push_cmds` is sent to the SSH channel as a result of the EOF handler.
 
 ---
 
