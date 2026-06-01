@@ -14,7 +14,15 @@ defmodule GitRekt.WireProtocol.UploadPack do
 
   @service_name "git-upload-pack"
 
-  defstruct [:agent, state: :disco, no_done: false, caps: [], advertised_caps: [], wants: [], haves: []]
+  defstruct [
+    :agent,
+    state: :disco,
+    no_done: false,
+    caps: [],
+    advertised_caps: [],
+    wants: [],
+    haves: []
+  ]
 
   @type t :: %__MODULE__{
           agent: GitAgent.agent(),
@@ -41,7 +49,11 @@ defmodule GitRekt.WireProtocol.UploadPack do
     new_handle = disco_transition_state(handle, new_state)
 
     {new_handle, remaining_lines,
-     reference_discovery(new_handle.agent, @service_name, if(handle.no_done, do: ["no-done"], else: []))}
+     reference_discovery(
+       new_handle.agent,
+       @service_name,
+       if(handle.no_done, do: ["no-done"], else: [])
+     )}
   end
 
   def next(%__MODULE__{state: :upload_req} = handle, [:flush | lines]) do
