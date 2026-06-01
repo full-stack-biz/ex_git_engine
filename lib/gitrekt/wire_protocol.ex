@@ -21,7 +21,7 @@ defmodule GitRekt.WireProtocol do
   alias GitRekt.GitRef
   alias GitRekt.WireProtocol.ReceivePack
 
-  @upload_caps ~w(multi_ack multi_ack_detailed ofs-delta)
+  @upload_caps ~w(multi_ack multi_ack_detailed ofs-delta side-band side-band-64k)
   @receive_caps ~w(report-status report-status-v2 delete-refs ofs-delta atomic side-band-64k)
 
   @doc """
@@ -194,6 +194,12 @@ defmodule GitRekt.WireProtocol do
   def pkt_line({:sideband, channel, text}),
     do: ReceivePack.sideband_wrap(text, channel)
 
+  def pkt_line({:sideband_pack, channel, data}) when is_binary(data) do
+    size = byte_size(data) + 5
+    hex_size = size |> Integer.to_string(16) |> String.downcase() |> String.pad_leading(4, "0")
+    hex_size <> <<channel>> <> data
+  end
+
   def pkt_line(<<"PACK", _rest::binary>> = pack), do: pack
 
   def pkt_line(data) when is_binary(data),
@@ -207,6 +213,9 @@ defmodule GitRekt.WireProtocol do
   def pkt_line({:ack, oid}, _caps), do: pkt_line({:ack, oid})
   def pkt_line({:ack, oid, status}, _caps), do: pkt_line({:ack, oid, status})
   def pkt_line(:nak, _caps), do: pkt_line(:nak)
+
+  def pkt_line({:sideband_pack, channel, data}, _caps),
+    do: pkt_line({:sideband_pack, channel, data})
 
   def pkt_line({:sideband_report, channel, inner}, _caps),
     do: pkt_line({:sideband_report, channel, inner})
