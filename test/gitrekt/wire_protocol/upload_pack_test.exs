@@ -87,6 +87,17 @@ defmodule GitRekt.WireProtocol.UploadPackTest do
   end
 
   describe "server capability advertisement" do
+    test "ofs-delta is in base server capabilities for git-upload-pack" do
+      caps = GitRekt.WireProtocol.server_capabilities("git-upload-pack")
+      assert "ofs-delta" in caps
+    end
+
+    test "client sending ofs-delta is not rejected as unknown" do
+      advertised = GitRekt.WireProtocol.server_capabilities("git-upload-pack")
+      unknown = GitRekt.WireProtocol.validate_capabilities(["ofs-delta"], advertised)
+      assert unknown == []
+    end
+
     test "no-done is not in base server capabilities" do
       # no-done is stateless-RPC-only per git/fetch-pack.c:1138:
       #   if (args->stateless_rpc) no_done = 1;

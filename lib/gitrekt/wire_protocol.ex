@@ -21,7 +21,7 @@ defmodule GitRekt.WireProtocol do
   alias GitRekt.GitRef
   alias GitRekt.WireProtocol.ReceivePack
 
-  @upload_caps ~w(multi_ack multi_ack_detailed)
+  @upload_caps ~w(multi_ack multi_ack_detailed ofs-delta)
   @receive_caps ~w(report-status report-status-v2 delete-refs ofs-delta atomic side-band-64k)
 
   @doc """
