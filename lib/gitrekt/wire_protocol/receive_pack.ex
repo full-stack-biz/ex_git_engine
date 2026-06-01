@@ -11,7 +11,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
 
   require Logger
 
-  import GitRekt.WireProtocol, only: [reference_discovery: 3]
+  import GitRekt.WireProtocol, only: [reference_discovery: 2]
 
   @service_name "git-receive-pack"
 
@@ -59,7 +59,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
     Logger.debug("RECEIVE_PACK disco->done")
 
     {%{handle | state: :done, advertised_caps: advertised}, lines,
-     reference_discovery(handle.agent, @service_name, [])}
+     reference_discovery(handle.agent, @service_name)}
   end
 
   def next(%__MODULE__{state: :disco} = handle, lines) do
@@ -67,7 +67,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
     Logger.debug("RECEIVE_PACK disco->update_req: advertised_caps=#{inspect(advertised)}")
 
     {%{handle | state: :update_req, advertised_caps: advertised}, lines,
-     reference_discovery(handle.agent, @service_name, [])}
+     reference_discovery(handle.agent, @service_name)}
   end
 
   def next(%__MODULE__{state: :update_req} = handle, [:flush | lines]) do
@@ -197,7 +197,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
   advertised support for it.
   """
   def push_success_output(handle) do
-    if "report-status" in handle.advertised_caps do
+    if report_status_advertised?(handle.advertised_caps) do
       report = report_status(handle)
 
       if "side-band-64k" in handle.client_caps do
@@ -220,8 +220,12 @@ defmodule GitRekt.WireProtocol.ReceivePack do
     status_output = push_success_output(handle)
 
     if "side-band-64k" in handle.client_caps do
-      hook_output = Enum.map(messages, fn msg -> {:sideband, 2, msg} end)
-      status_output ++ hook_output ++ [:flush]
+      if "quiet" in handle.client_caps do
+        status_output ++ [:flush]
+      else
+        hook_output = Enum.map(messages, fn msg -> {:sideband, 2, msg} end)
+        status_output ++ hook_output ++ [:flush]
+      end
     else
       status_output ++ messages ++ [:flush]
     end
@@ -243,7 +247,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
   defp format_error_reason(reason), do: inspect(reason)
 
   defp push_error_output(handle, error_msg) do
-    if "report-status" in handle.advertised_caps do
+    if report_status_advertised?(handle.advertised_caps) do
       cmd_rejections =
         Enum.map(handle.cmds, fn cmd ->
           refname = elem(cmd, :erlang.tuple_size(cmd) - 1)
@@ -335,6 +339,9 @@ defmodule GitRekt.WireProtocol.ReceivePack do
 
     [{:unpack, "ok"} | ref_statuses]
   end
+
+  defp report_status_advertised?(caps),
+    do: "report-status" in caps or "report-status-v2" in caps
 
   defp push_pack(_agent, _writepack, progress) when progress.received_bytes == 0, do: :ok
 
