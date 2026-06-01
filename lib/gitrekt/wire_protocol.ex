@@ -57,11 +57,21 @@ defmodule GitRekt.WireProtocol do
   end
 
   @doc """
+  Returns the list of git services implemented by this library.
+  """
+  @spec valid_services() :: [binary]
+  def valid_services(), do: ["git-upload-pack", "git-receive-pack"]
+
+  @doc """
   Returns a new service object for the given `repo` and `executable`.
   """
-  @spec new(GitAgent.agent(), binary, keyword) :: struct
+  @spec new(GitAgent.agent(), binary, keyword) :: struct | {:error, :unknown_service}
   def new(agent, executable, init_values \\ []) do
-    struct(exec_impl(executable), Keyword.put(init_values, :agent, agent))
+    if executable in valid_services() do
+      struct(exec_impl(executable), Keyword.put(init_values, :agent, agent))
+    else
+      {:error, :unknown_service}
+    end
   end
 
   @doc """
