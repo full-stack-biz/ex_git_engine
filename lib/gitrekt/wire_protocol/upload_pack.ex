@@ -112,7 +112,7 @@ defmodule GitRekt.WireProtocol.UploadPack do
     if Enum.empty?(handle.haves) do
       {:ok, pack} = GitAgent.pack_create(handle.agent, handle.wants, timeout: :infinity)
       Logger.debug("UPLOAD_PACK: created pack (no haves), size=#{byte_size(pack)}")
-      {%{handle | state: :done}, [], [:nak, pack]}
+      {%{handle | state: :done}, [], pack_output(:nak, pack, handle.caps)}
     else
       haves = List.flatten(Enum.reverse(handle.haves))
       Logger.debug("UPLOAD_PACK: creating pack with haves=#{length(haves)}")
@@ -124,11 +124,8 @@ defmodule GitRekt.WireProtocol.UploadPack do
 
       Logger.debug("UPLOAD_PACK: created pack (with haves), size=#{byte_size(pack)}")
 
-      if multi_ack?(handle.caps) do
-        {%{handle | state: :done}, [], [{:ack, List.first(haves)}, pack]}
-      else
-        {%{handle | state: :done}, [], [:nak, pack]}
-      end
+      lead = if multi_ack?(handle.caps), do: {:ack, List.first(haves)}, else: :nak
+      {%{handle | state: :done}, [], pack_output(lead, pack, handle.caps)}
     end
   end
 
@@ -202,5 +199,35 @@ defmodule GitRekt.WireProtocol.UploadPack do
 
   defp multi_ack?(caps) do
     "multi_ack" in caps or "multi_ack_detailed" in caps
+  end
+
+  defp pack_output(lead, pack, caps) do
+    cond do
+      "side-band-64k" in caps ->
+        [lead] ++ pack_to_sideband_frames(pack, 65_515) ++ [:flush]
+
+      "side-band" in caps ->
+        [lead] ++ pack_to_sideband_frames(pack, 995) ++ [:flush]
+
+      true ->
+        [lead, pack]
+    end
+  end
+
+  @doc false
+  def pack_to_sideband_frames(pack, chunk_size) do
+    do_chunk(pack, chunk_size, [])
+  end
+
+  defp do_chunk(<<>>, _chunk_size, acc), do: Enum.reverse(acc)
+
+  defp do_chunk(pack, chunk_size, acc) do
+    case pack do
+      <<chunk::binary-size(chunk_size), rest::binary>> ->
+        do_chunk(rest, chunk_size, [{:sideband_pack, 1, chunk} | acc])
+
+      _ ->
+        Enum.reverse([{:sideband_pack, 1, pack} | acc])
+    end
   end
 end
