@@ -71,6 +71,21 @@ defmodule GitRekt.WireProtocol.UploadPackTest do
     end
   end
 
+  describe "object-format=sha1 capability" do
+    test "client echoing object-format=sha1 in want line is not rejected as unknown" do
+      # git/connect.c: when server advertises object-format=sha1, client echoes it back
+      # in the first want line's capability string.
+      # validate_capabilities must accept it; otherwise upload_req raises and fetch fails.
+      handle = UploadPack.skip(%UploadPack{state: :disco, no_done: false})
+      oid = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      lines = [{:want, "#{oid} multi_ack_detailed object-format=sha1"}, :flush]
+
+      {new_handle, _remaining, _output} = UploadPack.next(handle, lines)
+
+      assert "object-format=sha1" in new_handle.caps
+    end
+  end
+
   describe "server capability advertisement" do
     test "no-done is not in base server capabilities" do
       # no-done is stateless-RPC-only per git/fetch-pack.c:1138:

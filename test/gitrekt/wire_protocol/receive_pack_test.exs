@@ -392,6 +392,49 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     end
   end
 
+  describe "report-status-v2" do
+    test "report-status-v2 is in server capabilities for git-receive-pack" do
+      caps = GitRekt.WireProtocol.server_capabilities("git-receive-pack")
+      assert "report-status-v2" in caps
+    end
+
+    test "client sending report-status-v2 is not rejected as unknown" do
+      advertised = GitRekt.WireProtocol.server_capabilities("git-receive-pack")
+      unknown = GitRekt.WireProtocol.validate_capabilities(["report-status-v2"], advertised)
+      assert unknown == []
+    end
+
+    test "push_success_output fires when advertised_caps contains report-status-v2" do
+      handle = %ReceivePack{
+        advertised_caps: ["report-status-v2"],
+        client_caps: [],
+        cmds: [
+          {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"}
+        ]
+      }
+
+      assert [
+               {:unpack, "ok"},
+               {:ok, "refs/heads/main"}
+             ] = ReceivePack.push_success_output(handle)
+    end
+
+    test "push_success_output fires when client_caps contains report-status-v2" do
+      handle = %ReceivePack{
+        advertised_caps: ["report-status", "report-status-v2"],
+        client_caps: ["report-status-v2"],
+        cmds: [
+          {:create, Git.oid_parse("0000000000000000000000000000000000000001"), "refs/heads/main"}
+        ]
+      }
+
+      assert [
+               {:unpack, "ok"},
+               {:ok, "refs/heads/main"}
+             ] = ReceivePack.push_success_output(handle)
+    end
+  end
+
   describe "skip/1 advertised_caps conformance" do
     test "skip from disco state includes full server capabilities" do
       handle = %ReceivePack{state: :disco, advertised_caps: []}

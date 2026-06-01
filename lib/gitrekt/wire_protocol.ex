@@ -22,7 +22,7 @@ defmodule GitRekt.WireProtocol do
   alias GitRekt.WireProtocol.ReceivePack
 
   @upload_caps ~w(multi_ack multi_ack_detailed)
-  @receive_caps ~w(report-status delete-refs ofs-delta atomic side-band-64k)
+  @receive_caps ~w(report-status report-status-v2 delete-refs ofs-delta atomic side-band-64k)
 
   @doc """
   Callback used to transist a service to the next step.
@@ -123,8 +123,8 @@ defmodule GitRekt.WireProtocol do
   @doc """
   Returns a stream describing each ref and it current value.
   """
-  @spec reference_discovery(GitAgent.agent(), binary, [binary]) :: iolist
-  def reference_discovery(agent, service, extra_capabilities \\ []) do
+  @spec reference_discovery(GitAgent.agent(), binary, boolean) :: [term]
+  def reference_discovery(agent, service, no_done \\ false) do
     {:ok, refs} = GitAgent.references(agent, target: :commit, stream_chunk_size: :infinity)
     # Refs returned by libgit2's reference iterator are sorted in C locale order.
     # HEAD is prepended separately to ensure it appears first as per the spec.
@@ -133,7 +133,20 @@ defmodule GitRekt.WireProtocol do
       |> List.flatten()
       |> Enum.map(&format_ref_line/1)
 
-    caps = Enum.join(server_capabilities(service) ++ extra_capabilities, " ")
+    # symref=HEAD:<target> is upload-pack only — receive-pack never advertises it.
+    # Head target must be captured before reference_head/1 overwrites prefix and name.
+    symref_caps =
+      if service == "git-upload-pack" do
+        case GitAgent.head(agent) do
+          {:ok, head} -> ["symref=HEAD:#{head.prefix}#{head.name}"]
+          {:error, _} -> []
+        end
+      else
+        []
+      end
+
+    no_done_caps = if no_done, do: ["no-done"], else: []
+    caps = Enum.join(server_capabilities(service) ++ no_done_caps ++ symref_caps, " ")
 
     case refs do
       [first | rest] ->
@@ -314,8 +327,11 @@ defmodule GitRekt.WireProtocol do
   @doc """
   Returns the list of server capabilities for the given service.
   """
-  def server_capabilities("git-receive-pack"), do: [server_agent_capability() | @receive_caps]
-  def server_capabilities("git-upload-pack"), do: [server_agent_capability() | @upload_caps]
+  def server_capabilities("git-receive-pack"),
+    do: [server_agent_capability(), "object-format=sha1" | @receive_caps]
+
+  def server_capabilities("git-upload-pack"),
+    do: [server_agent_capability(), "object-format=sha1" | @upload_caps]
 
   @doc """
   Validates client capabilities against advertised capabilities.
