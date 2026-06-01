@@ -82,7 +82,13 @@ defmodule GitRekt.WireProtocol.UploadPack do
   end
 
   def next(%__MODULE__{state: :upload_haves} = handle, [:flush | lines]) do
-    {handle, lines, ack_haves(handle.haves, handle.caps) ++ [:nak]}
+    acks = ack_haves(handle.haves, handle.caps)
+
+    if "no-done" in handle.caps and multi_ack?(handle.caps) and handle.haves != [] do
+      {%{handle | state: :pack}, lines, acks ++ [:nak, {:ack, List.last(handle.haves)}]}
+    else
+      {handle, lines, acks ++ [:nak]}
+    end
   end
 
   def next(%__MODULE__{state: :upload_haves} = handle, [:done | lines]) do
