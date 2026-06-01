@@ -60,7 +60,7 @@ defmodule GitRekt.WireProtocol do
   Returns the list of git services implemented by this library.
   """
   @spec valid_services() :: [binary]
-  def valid_services(), do: ["git-upload-pack", "git-receive-pack"]
+  def valid_services, do: ["git-upload-pack", "git-receive-pack"]
 
   @doc """
   Returns a new service object for the given `repo` and `executable`.
@@ -235,6 +235,7 @@ defmodule GitRekt.WireProtocol do
   defp exec_next_state(service, lines, acc, old_state, ref, event_time) do
     Logger.debug(fn ->
       lines_info = if is_list(lines), do: length(lines), else: "binary(#{byte_size(lines)})"
+
       "EXEC_NEXT_STATE: service.state=#{service.state}, lines_count=#{lines_info}, acc_length=#{length(acc)}"
     end)
 
