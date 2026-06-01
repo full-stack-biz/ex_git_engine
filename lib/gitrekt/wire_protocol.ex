@@ -169,6 +169,7 @@ defmodule GitRekt.WireProtocol do
           | binary
           | {:sideband_report, integer, [term]}
           | {:sideband, integer, binary}
+          | {:sideband_pack, integer, binary}
           | {:unpack, binary}
           | {:ok, binary}
           | {:ng, binary, binary}

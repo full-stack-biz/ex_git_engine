@@ -124,13 +124,13 @@ defmodule GitRekt.WireProtocol.UploadPackTest do
     end
 
     test "pack_to_sideband_frames chunks at side-band-64k boundary (65515 bytes)" do
-      pack = :binary.copy(<<0>>, 65515 + 100)
-      frames = UploadPack.pack_to_sideband_frames(pack, 65515)
+      pack = :binary.copy(<<0>>, 65_515 + 100)
+      frames = UploadPack.pack_to_sideband_frames(pack, 65_515)
 
       assert length(frames) == 2
       assert {:sideband_pack, 1, chunk1} = Enum.at(frames, 0)
       assert {:sideband_pack, 1, chunk2} = Enum.at(frames, 1)
-      assert byte_size(chunk1) == 65515
+      assert byte_size(chunk1) == 65_515
       assert byte_size(chunk2) == 100
     end
 
@@ -148,7 +148,10 @@ defmodule GitRekt.WireProtocol.UploadPackTest do
       frames = UploadPack.pack_to_sideband_frames(pack, 100)
 
       assert length(frames) == 2
-      reassembled = Enum.reduce(frames, <<>>, fn {:sideband_pack, 1, chunk}, acc -> acc <> chunk end)
+
+      reassembled =
+        Enum.reduce(frames, <<>>, fn {:sideband_pack, 1, chunk}, acc -> acc <> chunk end)
+
       assert reassembled == pack
     end
   end

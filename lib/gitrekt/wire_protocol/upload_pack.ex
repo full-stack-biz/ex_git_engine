@@ -155,7 +155,7 @@ defmodule GitRekt.WireProtocol.UploadPack do
   # Helpers
   #
 
-  @doc false
+  @doc "Transitions handle from `:disco` to `new_state`, building `advertised_caps` from `no_done`."
   def disco_transition_state(handle, new_state) do
     %{handle | state: new_state, caps: [], advertised_caps: build_advertised_caps(handle.no_done)}
   end
@@ -214,7 +214,7 @@ defmodule GitRekt.WireProtocol.UploadPack do
     end
   end
 
-  @doc false
+  @doc "Splits a pack binary into `{:sideband_pack, 1, chunk}` tuples sized at most `chunk_size` bytes."
   def pack_to_sideband_frames(pack, chunk_size) do
     do_chunk(pack, chunk_size, [])
   end

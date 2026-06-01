@@ -219,15 +219,16 @@ defmodule GitRekt.WireProtocol.ReceivePack do
   def build_push_response(handle, messages) do
     status_output = push_success_output(handle)
 
-    if "side-band-64k" in handle.client_caps do
-      if "quiet" in handle.client_caps do
+    cond do
+      "side-band-64k" in handle.client_caps and "quiet" in handle.client_caps ->
         status_output ++ [:flush]
-      else
+
+      "side-band-64k" in handle.client_caps ->
         hook_output = Enum.map(messages, fn msg -> {:sideband, 2, msg} end)
         status_output ++ hook_output ++ [:flush]
-      end
-    else
-      status_output ++ messages ++ [:flush]
+
+      true ->
+        status_output ++ messages ++ [:flush]
     end
   end
 
