@@ -8,7 +8,28 @@
 #include "ex_git_engine.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <git2.h>
+
+/* Weak symbol: NULL if libgit2 was built without SHA256 support */
+#pragma weak git_repository_oid_type
+
+#define GEEF_OID_SHA1   1
+#define GEEF_OID_SHA256 2
+
+/* Mirrors git_repository_init_options with oid_type appended, matching the
+   ABI of libgit2 built with GIT_EXPERIMENTAL_SHA256 */
+typedef struct {
+    unsigned int version;
+    uint32_t flags;
+    uint32_t mode;
+    const char *workdir_path;
+    const char *description;
+    const char *template_path;
+    const char *initial_head;
+    const char *origin_url;
+    int oid_type;
+} geef_init_options_sha256;
 
 void git_engine_repository_free(ErlNifEnv *env, void *cd)
 {
@@ -47,7 +68,19 @@ git_engine_repository_init(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 	options.initial_head = (char *)head.data;
 
-	error = git_repository_init_ext(&repo, (char *)bin.data, &options);
+	if (!enif_compare(argv[3], atoms.sha256)) {
+		if (!git_repository_oid_type)
+			return enif_make_tuple2(env, atoms.error,
+				enif_make_atom(env, "sha256_not_supported"));
+
+		geef_init_options_sha256 sha256_opts;
+		memcpy(&sha256_opts, &options, sizeof(options));
+		sha256_opts.oid_type = GEEF_OID_SHA256;
+		error = git_repository_init_ext(&repo, (char *)bin.data,
+			(git_repository_init_options *)&sha256_opts);
+	} else {
+		error = git_repository_init_ext(&repo, (char *)bin.data, &options);
+	}
 	if (error < 0)
 		return git_engine_error_struct(env, error);
 
@@ -57,6 +90,26 @@ git_engine_repository_init(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	enif_release_resource(res_repo);
 
 	return enif_make_tuple2(env, atoms.ok, term_repo);
+}
+
+ERL_NIF_TERM
+git_engine_sha256_supported(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+	return git_repository_oid_type ? atoms.true : atoms.false;
+}
+
+ERL_NIF_TERM
+git_engine_repository_oid_type(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+	git_engine_repository *repo;
+
+	if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **)&repo))
+		return enif_make_badarg(env);
+
+	if (git_repository_oid_type && git_repository_oid_type(repo->repo) == GEEF_OID_SHA256)
+		return atoms.sha256;
+
+	return atoms.sha1;
 }
 
 ERL_NIF_TERM
