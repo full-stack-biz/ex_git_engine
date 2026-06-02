@@ -47,6 +47,8 @@ typedef struct {
 	ERL_NIF_TERM zlib_need_dict;
 	ERL_NIF_TERM zlib_data_error;
 	ERL_NIF_TERM zlib_stream_error;
+	ERL_NIF_TERM sha1;
+	ERL_NIF_TERM sha256;
 	ERL_NIF_TERM enomem;
 	ERL_NIF_TERM eunknown;
 	ERL_NIF_TERM estruct;

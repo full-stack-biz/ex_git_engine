@@ -7,6 +7,8 @@
 #define MAXBUFLEN       1024
 
 ERL_NIF_TERM geef_repository_init(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
+ERL_NIF_TERM geef_repository_oid_type(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
+ERL_NIF_TERM geef_sha256_supported(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 ERL_NIF_TERM geef_repository_open(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 ERL_NIF_TERM geef_repository_discover(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 ERL_NIF_TERM geef_repository_path(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);

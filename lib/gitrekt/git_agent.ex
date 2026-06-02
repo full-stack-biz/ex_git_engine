@@ -282,6 +282,12 @@ defmodule GitRekt.GitAgent do
   def empty?(agent, opts \\ []), do: exec(agent, :empty?, opts)
 
   @doc """
+  Returns the object ID type (`:sha1` or `:sha256`) used by the repository.
+  """
+  @spec hash_algo(agent, keyword) :: {:ok, :sha1 | :sha256} | {:error, term}
+  def hash_algo(agent, opts \\ []), do: exec(agent, :hash_algo, opts)
+
+  @doc """
   Returns the ODB.
   """
   @spec odb(agent, keyword) :: {:ok, GitOdb.t()}
@@ -825,6 +831,10 @@ defmodule GitRekt.GitAgent do
   end
 
   defp pop_exec_opts(opts), do: Enum.split_with(opts, fn {k, _v} -> k in @exec_opts end)
+
+  defp call(handle, :hash_algo) do
+    {:ok, Git.repository_oid_type(handle)}
+  end
 
   defp call(handle, :empty?) do
     {:ok, Git.repository_empty?(handle)}

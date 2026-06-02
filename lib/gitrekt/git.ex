@@ -382,8 +382,25 @@ defmodule GitRekt.Git do
   @doc """
   Initializes a new repository at the given `path`.
   """
-  @spec repository_init(Path.t(), boolean, binary) :: {:ok, repo} | {:error, term}
-  def repository_init(_path, _bare \\ false, _initial_head \\ "master") do
+  @spec repository_init(Path.t(), boolean, binary, :sha1 | :sha256) :: {:ok, repo} | {:error, term}
+  def repository_init(_path, _bare \\ false, _initial_head \\ "main", _hash_algo \\ :sha1) do
+    :erlang.nif_error(:not_loaded)
+  end
+
+  @doc """
+  Returns the object ID type (`:sha1` or `:sha256`) used by the given repository.
+  """
+  @spec repository_oid_type(repo) :: :sha1 | :sha256
+  def repository_oid_type(_repo) do
+    :erlang.nif_error(:not_loaded)
+  end
+
+  @doc """
+  Returns whether this libgit2 build supports SHA256 repositories
+  (requires `GIT_EXPERIMENTAL_SHA256` at compile time).
+  """
+  @spec sha256_supported?() :: boolean
+  def sha256_supported?() do
     :erlang.nif_error(:not_loaded)
   end
 

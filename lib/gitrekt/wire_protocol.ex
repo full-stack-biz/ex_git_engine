@@ -145,15 +145,22 @@ defmodule GitRekt.WireProtocol do
         []
       end
 
+    hash_algo =
+      case GitAgent.hash_algo(agent) do
+        {:ok, algo} -> algo
+        {:error, _} -> :sha1
+      end
+
     no_done_caps = if no_done, do: ["no-done"], else: []
-    caps = Enum.join(server_capabilities(service) ++ no_done_caps ++ symref_caps, " ")
+    caps = Enum.join(server_capabilities(service, hash_algo) ++ no_done_caps ++ symref_caps, " ")
 
     case refs do
       [first | rest] ->
         [first <> "\0" <> caps | rest]
 
       [] ->
-        [String.duplicate("0", 40) <> " capabilities^{}\0" <> caps]
+        null_oid = if hash_algo == :sha256, do: String.duplicate("0", 64), else: String.duplicate("0", 40)
+        [null_oid <> " capabilities^{}\0" <> caps]
     end
     |> Enum.concat([:flush])
   end
@@ -335,13 +342,15 @@ defmodule GitRekt.WireProtocol do
   def server_agent_capability, do: "agent=gitrekt/#{Application.spec(:gitrekt, :vsn)}"
 
   @doc """
-  Returns the list of server capabilities for the given service.
+  Returns the list of server capabilities for the given service and hash algorithm.
   """
-  def server_capabilities("git-receive-pack"),
-    do: [server_agent_capability(), "object-format=sha1" | @receive_caps]
+  def server_capabilities(service, hash_algo \\ :sha1)
 
-  def server_capabilities("git-upload-pack"),
-    do: [server_agent_capability(), "object-format=sha1" | @upload_caps]
+  def server_capabilities("git-receive-pack", hash_algo),
+    do: [server_agent_capability(), "object-format=#{hash_algo}" | @receive_caps]
+
+  def server_capabilities("git-upload-pack", hash_algo),
+    do: [server_agent_capability(), "object-format=#{hash_algo}" | @upload_caps]
 
   @doc """
   Validates client capabilities against advertised capabilities.
