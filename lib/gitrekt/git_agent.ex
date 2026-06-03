@@ -468,7 +468,8 @@ defmodule GitRekt.GitAgent do
   Returns the Git object matching the given `spec`.
   """
   @spec revision(agent, binary, keyword) ::
-          {:ok, {GitRef.t() | GitTag.t(), GitCommit.t() | nil}} | {:error, term}
+          {:ok, {GitBlob.t() | GitCommit.t() | GitTree.t() | GitTag.t(), GitRef.t() | nil}}
+          | {:error, term}
   def revision(agent, spec, opts \\ []), do: exec(agent, {:revision, spec}, opts)
 
   @doc """
@@ -1608,6 +1609,21 @@ defmodule GitRekt.GitAgent do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  defp fetch_diff(nil, %GitTree{__ref__: tree2}, handle, opts) do
+    case Git.diff_tree(handle, nil, tree2, opts) do
+      {:ok, diff} ->
+        {:ok, %GitDiff{__ref__: diff}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp fetch_diff(nil, obj2, handle, opts) do
+    with {:ok, tree2} <- fetch_tree(obj2, handle),
+         do: fetch_diff(nil, tree2, handle, opts)
   end
 
   defp fetch_diff(obj1, obj2, handle, opts) do

@@ -204,7 +204,7 @@ geef_diff_tree(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	int error;
 	geef_repository *repo;
-	geef_object *old_tree;
+	geef_object *old_tree = NULL;
 	geef_object *new_tree;
 	geef_diff *diff;
 	git_diff_options diff_opts;
@@ -213,8 +213,10 @@ geef_diff_tree(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (!enif_get_resource(env, argv[0], geef_repository_type, (void **) &repo))
 		return enif_make_badarg(env);
 
-	if (!enif_get_resource(env, argv[1], geef_object_type, (void **) &old_tree))
-		return enif_make_badarg(env);
+	if (!enif_is_identical(argv[1], atoms.nil)) {
+		if (!enif_get_resource(env, argv[1], geef_object_type, (void **) &old_tree))
+			return enif_make_badarg(env);
+	}
 
 	if (!enif_get_resource(env, argv[2], geef_object_type, (void **) &new_tree))
 		return enif_make_badarg(env);
@@ -224,7 +226,7 @@ geef_diff_tree(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 		return geef_oom(env);
 
 	diff_opts = diff_opts_atom2type(env, argv[3]);
-	error = git_diff_tree_to_tree(&diff->diff, repo->repo, (git_tree *)old_tree->obj, (git_tree *)new_tree->obj, &diff_opts);
+	error = git_diff_tree_to_tree(&diff->diff, repo->repo, old_tree ? (git_tree *)old_tree->obj : NULL, (git_tree *)new_tree->obj, &diff_opts);
 	if (error < 0) {
 		enif_release_resource(diff);
 		return geef_error_struct(env, error);
