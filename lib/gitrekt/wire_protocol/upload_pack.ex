@@ -229,7 +229,7 @@ defmodule GitRekt.WireProtocol.UploadPack do
 
   defp do_chunk(pack, chunk_size, acc) do
     case pack do
-      <<chunk::binary-size(chunk_size), rest::binary>> ->
+      <<chunk::binary-size(^chunk_size), rest::binary>> ->
         do_chunk(rest, chunk_size, [{:sideband_pack, 1, chunk} | acc])
 
       _ ->

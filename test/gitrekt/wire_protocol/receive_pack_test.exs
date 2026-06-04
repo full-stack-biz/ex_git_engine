@@ -52,12 +52,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
 
   describe "error response format" do
     test "formats errors as 'unpack ng <reason>' with flush terminator" do
-      # Simulate error response by matching the error case in next/2
-      reason = "ref update failed"
-      error_msg = if is_binary(reason), do: reason, else: inspect(reason)
-      error_response = ["unpack ng #{error_msg}", :flush]
-
-      assert error_response == ["unpack ng ref update failed", :flush]
+      error_response = ["unpack ng ref update failed", :flush]
 
       assert Enum.any?(error_response, fn item ->
                is_binary(item) && String.starts_with?(item, "unpack ng")
@@ -68,8 +63,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
 
     test "handles atom errors by converting to string" do
       reason = :permission_denied
-      error_msg = if is_binary(reason), do: reason, else: inspect(reason)
-      error_response = ["unpack ng #{error_msg}", :flush]
+      error_response = ["unpack ng #{inspect(reason)}", :flush]
 
       assert error_response == ["unpack ng :permission_denied", :flush]
       assert :flush in error_response

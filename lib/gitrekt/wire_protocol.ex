@@ -418,13 +418,13 @@ defmodule GitRekt.WireProtocol do
         data_size_skip_lf = data_size - 1
 
         case payload do
-          <<data::bytes-size(data_size_skip_lf), "\n", rest::binary>> ->
+          <<data::bytes-size(^data_size_skip_lf), "\n", rest::binary>> ->
             {[data], rest}
 
-          <<data::bytes-size(data_size), rest::binary>> ->
+          <<data::bytes-size(^data_size), rest::binary>> ->
             {[data], rest}
 
-          <<data::bytes-size(data_size)>> ->
+          <<data::bytes-size(^data_size)>> ->
             {[data], ""}
         end
       {payload_size, ""} ->
