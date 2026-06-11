@@ -988,7 +988,7 @@ defmodule GitRekt.GitAgent do
   end
 
   defp call(_handle, {:tag_author, obj}), do: fetch_author(obj)
-  defp call(_handle, {:tag_message, obj}), do: fetch_author(obj)
+  defp call(_handle, {:tag_message, obj}), do: fetch_message(obj)
   defp call(_handle, {:commit_author, obj}), do: fetch_author(obj)
   defp call(_handle, {:commit_committer, obj}), do: fetch_committer(obj)
   defp call(_handle, {:commit_message, obj}), do: fetch_message(obj)
@@ -1457,16 +1457,27 @@ defmodule GitRekt.GitAgent do
   defp fetch_reference_target(ref, :undefined, _handle), do: {:ok, ref}
   defp fetch_reference_target(%GitRef{type: :branch} = ref, _target, _handle), do: {:ok, ref}
 
-  defp fetch_reference_target(%GitRef{type: :tag} = ref, target, handle) do
-    case fetch_target(ref, target, handle) do
+  defp fetch_reference_target(%GitRef{type: :tag} = ref, :tag, handle) do
+    case fetch_target(ref, :tag, handle) do
       {:ok, %GitTag{} = tag} ->
         {:ok, tag}
 
       {:ok, %GitCommit{oid: oid}} ->
         {:ok, struct(ref, oid: oid)}
 
-      {:error, reason} ->
-        {:error, reason}
+      {:error, _reason} ->
+        case Git.reference_peel(handle, ref.prefix <> ref.name, :commit) do
+          {:ok, _obj_type, oid, _obj} -> {:ok, struct(ref, oid: oid)}
+          {:error, reason} -> {:error, reason}
+        end
+    end
+  end
+
+  defp fetch_reference_target(%GitRef{type: :tag} = ref, target, handle) do
+    case fetch_target(ref, target, handle) do
+      {:ok, %GitTag{} = tag} -> {:ok, tag}
+      {:ok, %GitCommit{oid: oid}} -> {:ok, struct(ref, oid: oid)}
+      {:error, reason} -> {:error, reason}
     end
   end
 
