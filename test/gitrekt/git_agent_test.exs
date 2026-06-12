@@ -27,6 +27,12 @@ defmodule GitRekt.GitAgentTest do
     cmd.(["commit", "-m", "feature commit"])
     cmd.(["checkout", "main"])
 
+    cmd.(["checkout", "-b", "group/topic"])
+    File.write!(Path.join(path, "group.txt"), "group\n")
+    cmd.(["add", "."])
+    cmd.(["commit", "-m", "group commit"])
+    cmd.(["checkout", "main"])
+
     {:ok, agent} = GitAgent.start_link(path)
 
     on_exit(fn ->
@@ -67,7 +73,7 @@ defmodule GitRekt.GitAgentTest do
     test "returns all branches", %{agent: agent} do
       {:ok, branches} = GitAgent.branches(agent)
       names = branches |> Enum.to_list() |> Enum.map(& &1.name) |> Enum.sort()
-      assert names == ["feature", "main"]
+      assert names == ["feature", "group/topic", "main"]
     end
 
     test "each branch is a GitRef with type :branch", %{agent: agent} do
@@ -167,6 +173,11 @@ defmodule GitRekt.GitAgentTest do
 
     test "resolves tag name to ref and commit", %{agent: agent} do
       assert {:ok, {%GitCommit{}, _ref}} = GitAgent.revision(agent, "v1.0")
+    end
+
+    test "resolves branch name with slash to ref and commit", %{agent: agent} do
+      assert {:ok, {%GitCommit{}, %GitRef{name: "group/topic"}}} =
+               GitAgent.revision(agent, "group/topic")
     end
 
     test "returns error for unknown revision", %{agent: agent} do

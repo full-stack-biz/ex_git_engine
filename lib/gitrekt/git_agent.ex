@@ -1345,8 +1345,7 @@ defmodule GitRekt.GitAgent do
   defp resolve_reference({nil, nil, :oid, _oid}), do: nil
 
   defp resolve_reference({name, nil, :oid, oid}) do
-    prefix = Path.dirname(name) <> "/"
-    shorthand = Path.basename(name)
+    {prefix, shorthand} = prettify_ref(name)
     %GitRef{oid: oid, name: shorthand, prefix: prefix, type: resolve_reference_type(prefix)}
   end
 
@@ -1354,6 +1353,10 @@ defmodule GitRekt.GitAgent do
     prefix = String.slice(name, 0, String.length(name) - String.length(shorthand))
     %GitRef{oid: oid, name: shorthand, prefix: prefix, type: resolve_reference_type(prefix)}
   end
+
+  defp prettify_ref("refs/heads/" <> shorthand), do: {"refs/heads/", shorthand}
+  defp prettify_ref("refs/tags/" <> shorthand), do: {"refs/tags/", shorthand}
+  defp prettify_ref(name), do: {Path.dirname(name) <> "/", Path.basename(name)}
 
   defp resolve_reference_type("refs/heads/"), do: :branch
   defp resolve_reference_type("refs/tags/"), do: :tag
