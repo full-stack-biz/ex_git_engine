@@ -20,6 +20,7 @@
 #include "config.h"
 #include "pack.h"
 #include "worktree.h"
+#include "merge.h"
 #include "geef.h"
 #include <stdio.h>
 #include <string.h>
@@ -400,6 +401,8 @@ static ErlNifFunc geef_funcs[] =
 	{"pack_data", 1, geef_pack_data, 0},
 	{"worktree_add", 4, geef_worktree_add, 0},
 	{"worktree_prune", 1, geef_worktree_prune, 0},
+	{"merge_commits", 3, geef_merge_commits, 0},
+	{"merge_base", 3, geef_merge_base, 0},
 };
 
 ERL_NIF_INIT(Elixir.GitRekt.Git, geef_funcs, load, NULL, upgrade, unload)

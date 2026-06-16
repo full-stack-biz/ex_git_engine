@@ -1044,6 +1044,23 @@ defmodule GitRekt.Git do
   end
 
   @doc """
+  Merges two commits and returns the merged index.
+  Returns `{:ok, index}` on success, `{:error, :conflict}` if there are conflicts.
+  """
+  @spec merge_commits(repo, obj, obj) :: {:ok, index} | {:error, :conflict} | {:error, term}
+  def merge_commits(_repo, _our_commit, _their_commit) do
+    :erlang.nif_error(:not_loaded)
+  end
+
+  @doc """
+  Finds the merge base (common ancestor) OID for two commits.
+  """
+  @spec merge_base(repo, oid, oid) :: {:ok, oid} | {:error, term}
+  def merge_base(_repo, _oid1, _oid2) do
+    :erlang.nif_error(:not_loaded)
+  end
+
+  @doc """
   Returns the number of entries in the given `index`.
   """
   @spec index_count(index) :: non_neg_integer()

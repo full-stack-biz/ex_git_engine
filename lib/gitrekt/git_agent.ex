@@ -638,6 +638,14 @@ defmodule GitRekt.GitAgent do
     do: exec(agent, {:index_write_tree, index}, opts)
 
   @doc """
+  Merges two commits and returns the merged index.
+  """
+  @spec merge_commits(agent, GitCommit.t(), GitCommit.t(), keyword) ::
+          {:ok, GitIndex.t()} | {:error, :conflict} | {:error, term}
+  def merge_commits(agent, our_commit, their_commit, opts \\ []),
+    do: exec(agent, {:merge_commits, our_commit, their_commit}, opts)
+
+  @doc """
   Returns the Git diff of `obj1` and `obj2`.
   """
   @spec diff(agent, git_revision | GitTree.t(), git_revision | GitTree.t(), keyword) ::
@@ -1152,6 +1160,13 @@ defmodule GitRekt.GitAgent do
 
   defp call(handle, {:index_write_tree, %GitIndex{__ref__: index}}),
     do: Git.index_write_tree(index, handle)
+
+  defp call(handle, {:merge_commits, %GitCommit{__ref__: our}, %GitCommit{__ref__: their}}) do
+    case Git.merge_commits(handle, our, their) do
+      {:ok, index} -> {:ok, resolve_index(index)}
+      {:error, _} = err -> err
+    end
+  end
 
   defp call(handle, {:history, rev, opts}), do: walk_history(rev, handle, opts)
   defp call(handle, {:peel, obj, target}), do: fetch_target(obj, target, handle)
