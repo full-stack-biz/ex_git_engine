@@ -1361,20 +1361,24 @@ defmodule GitRekt.GitAgent do
 
   defp resolve_reference({name, nil, :oid, oid}) do
     {prefix, shorthand} = prettify_ref(name)
-    %GitRef{oid: oid, name: shorthand, prefix: prefix, type: resolve_reference_type(prefix)}
+    %GitRef{oid: oid, name: shorthand, prefix: prefix, type: resolve_reference_type(name)}
   end
 
   defp resolve_reference({name, shorthand, :oid, oid}) do
     prefix = String.slice(name, 0, String.length(name) - String.length(shorthand))
-    %GitRef{oid: oid, name: shorthand, prefix: prefix, type: resolve_reference_type(prefix)}
+    %GitRef{oid: oid, name: shorthand, prefix: prefix, type: resolve_reference_type(name)}
   end
 
   defp prettify_ref("refs/heads/" <> shorthand), do: {"refs/heads/", shorthand}
   defp prettify_ref("refs/tags/" <> shorthand), do: {"refs/tags/", shorthand}
   defp prettify_ref(name), do: {Path.dirname(name) <> "/", Path.basename(name)}
 
-  defp resolve_reference_type("refs/heads/"), do: :branch
-  defp resolve_reference_type("refs/tags/"), do: :tag
+  defp resolve_reference_type("refs/heads/" <> _), do: :branch
+  defp resolve_reference_type("refs/tags/" <> _), do: :tag
+  defp resolve_reference_type("refs/remotes/" <> _), do: :remote
+  defp resolve_reference_type("refs/notes/" <> _), do: :note
+  defp resolve_reference_type("refs/pull/" <> _), do: :pull
+  defp resolve_reference_type(_), do: :other
 
   defp resolve_reference_peel!(ref, target, handle) do
     case fetch_reference_target(resolve_reference(ref), target, handle) do
