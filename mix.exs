@@ -14,7 +14,8 @@ defmodule GitRekt.Mixfile do
       make_args: ["--quiet"],
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      aliases: aliases()
+      aliases: aliases(),
+      dialyzer: [plt_add_apps: [:ex_unit]]
     ]
   end
 

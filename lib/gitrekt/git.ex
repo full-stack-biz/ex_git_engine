@@ -388,6 +388,14 @@ defmodule GitRekt.Git do
   end
 
   @doc """
+  Clones a repository from `url` into `local_path`. Runs on a dirty IO scheduler.
+  """
+  @spec repository_clone(binary, Path.t(), boolean) :: {:ok, repo} | {:error, term}
+  def repository_clone(_url, _local_path, _bare \\ true) do
+    :erlang.nif_error(:not_loaded)
+  end
+
+  @doc """
   Looks for a repository and returns its path.
   """
   @spec repository_discover(Path.t()) :: {:ok, Path.t()} | {:error, term}

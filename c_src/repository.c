@@ -234,6 +234,43 @@ geef_repository_odb(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 }
 
 ERL_NIF_TERM
+geef_repository_clone(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+	int error, bare;
+	git_repository *repo;
+	geef_repository *res_repo;
+	ErlNifBinary url, local_path;
+	ERL_NIF_TERM term_repo;
+	git_clone_options opts = GIT_CLONE_OPTIONS_INIT;
+
+	if (!enif_inspect_binary(env, argv[0], &url))
+		return enif_make_badarg(env);
+
+	if (!geef_terminate_binary(&url))
+		return geef_oom(env);
+
+	if (!enif_inspect_binary(env, argv[1], &local_path))
+		return enif_make_badarg(env);
+
+	if (!geef_terminate_binary(&local_path))
+		return geef_oom(env);
+
+	bare = !enif_compare(argv[2], atoms.true);
+	opts.bare = bare ? 1 : 0;
+
+	error = git_clone(&repo, (char *)url.data, (char *)local_path.data, &opts);
+	if (error < 0)
+		return geef_error_struct(env, error);
+
+	res_repo = enif_alloc_resource(geef_repository_type, sizeof(geef_repository));
+	res_repo->repo = repo;
+	term_repo = enif_make_resource(env, res_repo);
+	enif_release_resource(res_repo);
+
+	return enif_make_tuple2(env, atoms.ok, term_repo);
+}
+
+ERL_NIF_TERM
 geef_repository_index(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	int error;
