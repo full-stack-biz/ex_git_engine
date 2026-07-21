@@ -1503,6 +1503,8 @@ defmodule GitRekt.GitAgent do
     end
   end
 
+  defp fetch_reference_target(%GitRef{} = ref, _target, _handle), do: {:ok, ref}
+
   defp fetch_tree(%GitCommit{__ref__: commit}, _handle) do
     case Git.commit_tree(commit) do
       {:ok, oid, tree} ->

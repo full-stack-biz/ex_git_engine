@@ -352,6 +352,21 @@ defmodule GitRekt.GitAgentTest do
     end
   end
 
+  describe "references/2 with target: :commit" do
+    test "includes refs/pull/* without crashing", %{path: path, agent: agent} do
+      {:ok, {commit, _}} = GitAgent.revision(agent, "main")
+      oid_hex = Base.encode16(commit.oid, case: :lower)
+
+      System.cmd("git", ["-C", path, "update-ref", "refs/pull/1/head", oid_hex],
+        stderr_to_stdout: true
+      )
+
+      {:ok, refs} = GitAgent.references(agent, target: :commit, stream_chunk_size: :infinity)
+      names = refs |> Enum.to_list() |> Enum.map(& &1.name)
+      assert "pull/1/head" in names
+    end
+  end
+
   describe "graph_ahead_behind/3" do
     test "feature is 1 ahead and 0 behind main", %{agent: agent} do
       {:ok, main_ref} = GitAgent.branch(agent, "main")
