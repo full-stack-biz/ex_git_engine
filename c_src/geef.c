@@ -405,7 +405,7 @@ static ErlNifFunc geef_funcs[] =
 	{"worktree_prune", 1, geef_worktree_prune, 0},
 	{"merge_commits", 3, geef_merge_commits, 0},
 	{"merge_base", 3, geef_merge_base, 0},
-	{"blame_file", 2, geef_blame_file, ERL_NIF_DIRTY_JOB_IO_BOUND},
+	{"blame_file", 3, geef_blame_file, ERL_NIF_DIRTY_JOB_IO_BOUND},
 };
 
 ERL_NIF_INIT(Elixir.GitRekt.Git, geef_funcs, load, NULL, upgrade, unload)

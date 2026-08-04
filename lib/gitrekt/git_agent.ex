@@ -542,7 +542,10 @@ defmodule GitRekt.GitAgent do
   `:author_email`, `:timestamp` (`DateTime`).
   """
   @spec blame(agent, Path.t(), keyword) :: {:ok, [map()]} | {:error, term}
-  def blame(agent, path, opts \\ []), do: exec(agent, {:blame, path}, opts)
+  def blame(agent, path, opts \\ []) do
+    {newest_commit, exec_opts} = Keyword.pop(opts, :newest_commit)
+    exec(agent, {:blame, path, newest_commit}, exec_opts)
+  end
 
   @doc """
   Returns the size in byte of the given `blob`.
@@ -1089,8 +1092,8 @@ defmodule GitRekt.GitAgent do
 
   defp call(_handle, {:blob_content, %GitBlob{__ref__: blob}}), do: Git.blob_content(blob)
 
-  defp call(handle, {:blame, path}) do
-    case Git.blame_file(handle, path) do
+  defp call(handle, {:blame, path, newest_commit}) do
+    case Git.blame_file(handle, path, newest_commit) do
       {:ok, hunks} ->
         {:ok,
          Enum.map(hunks, fn {oid, start_line, line_count, name, email, ts} ->

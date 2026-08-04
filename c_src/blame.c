@@ -23,6 +23,14 @@ geef_blame_file(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (!enif_inspect_binary(env, argv[1], &path_bin))
 		return enif_make_badarg(env);
 
+	/* argv[2]: binary OID to blame from (newest commit), or nil for HEAD */
+	if (enif_compare(argv[2], atoms.nil) != 0) {
+		ErlNifBinary oid_bin;
+		if (!enif_inspect_binary(env, argv[2], &oid_bin) || oid_bin.size != GIT_OID_RAWSZ)
+			return enif_make_badarg(env);
+		git_oid_fromraw(&opts.newest_commit, oid_bin.data);
+	}
+
 	if (!geef_terminate_binary(&path_bin))
 		return geef_oom(env);
 

@@ -1308,9 +1308,9 @@ defmodule GitRekt.Git do
   Each hunk is a tuple `{oid, start_line, line_count, author_name, author_email, timestamp}` where
   `start_line` is 1-based, and `timestamp` is Unix seconds.
   """
-  @spec blame_file(repo, Path.t()) ::
+  @spec blame_file(repo, Path.t(), binary | nil) ::
           {:ok, [{binary, pos_integer, pos_integer, binary, binary, integer}]} | {:error, term}
-  def blame_file(_repo, _path) do
+  def blame_file(_repo, _path, _newest_commit_oid) do
     :erlang.nif_error(:not_loaded)
   end
 

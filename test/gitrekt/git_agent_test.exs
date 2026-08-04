@@ -397,6 +397,14 @@ defmodule GitRekt.GitAgentTest do
     test "returns error for non-existent path", %{agent: agent} do
       assert {:error, _reason} = GitAgent.blame(agent, "no_such_file.txt")
     end
+
+    test "accepts newest_commit opt and returns same result as default", %{agent: agent} do
+      {:ok, {commit, _}} = GitAgent.revision(agent, "main")
+      assert {:ok, default_hunks} = GitAgent.blame(agent, "README.md")
+      assert {:ok, pinned_hunks} = GitAgent.blame(agent, "README.md", newest_commit: commit.oid)
+      assert length(default_hunks) == length(pinned_hunks)
+      assert hd(default_hunks).oid == hd(pinned_hunks).oid
+    end
   end
 
   describe "graph_ahead_behind/3" do
