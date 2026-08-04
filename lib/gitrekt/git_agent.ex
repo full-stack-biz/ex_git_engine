@@ -536,6 +536,15 @@ defmodule GitRekt.GitAgent do
   def blob_content(agent, blob, opts \\ []), do: exec(agent, {:blob_content, blob}, opts)
 
   @doc """
+  Returns blame hunks for `path` in the repository.
+
+  Each hunk map has: `:oid`, `:start_line` (1-based), `:line_count`, `:author_name`,
+  `:author_email`, `:timestamp` (`DateTime`).
+  """
+  @spec blame(agent, Path.t(), keyword) :: {:ok, [map()]} | {:error, term}
+  def blame(agent, path, opts \\ []), do: exec(agent, {:blame, path}, opts)
+
+  @doc """
   Returns the size in byte of the given `blob`.
   """
   @spec blob_size(agent, GitBlob.t(), keyword) :: {:ok, non_neg_integer} | {:error, term}
@@ -1079,6 +1088,27 @@ defmodule GitRekt.GitAgent do
   end
 
   defp call(_handle, {:blob_content, %GitBlob{__ref__: blob}}), do: Git.blob_content(blob)
+
+  defp call(handle, {:blame, path}) do
+    case Git.blame_file(handle, path) do
+      {:ok, hunks} ->
+        {:ok,
+         Enum.map(hunks, fn {oid, start_line, line_count, name, email, ts} ->
+           %{
+             oid: oid,
+             start_line: start_line,
+             line_count: line_count,
+             author_name: name,
+             author_email: email,
+             timestamp: DateTime.from_unix!(ts)
+           }
+         end)}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   defp call(_handle, {:blob_size, %GitBlob{__ref__: blob}}), do: Git.blob_size(blob)
 
   defp call(handle, {:diff, obj1, obj2, opts}), do: fetch_diff(obj1, obj2, handle, opts)

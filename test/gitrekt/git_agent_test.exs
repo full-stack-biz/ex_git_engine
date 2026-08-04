@@ -367,6 +367,38 @@ defmodule GitRekt.GitAgentTest do
     end
   end
 
+  describe "blame/2" do
+    test "returns one hunk for single-commit file", %{agent: agent} do
+      assert {:ok, hunks} = GitAgent.blame(agent, "README.md")
+      assert [hunk] = hunks
+      assert hunk.start_line == 1
+      assert hunk.line_count >= 1
+      assert hunk.author_name == "Test User"
+      assert %DateTime{} = hunk.timestamp
+      assert is_binary(hunk.oid) and byte_size(hunk.oid) == 20
+    end
+
+    test "returns multiple hunks for file modified across commits", %{path: path, agent: agent} do
+      cmd = fn args -> System.cmd("git", ["-C", path | args], stderr_to_stdout: true) end
+
+      File.write!(Path.join(path, "README.md"), "# Hello\nNew line\n")
+      cmd.(["add", "README.md"])
+      cmd.(["commit", "-m", "add second line"])
+
+      assert {:ok, hunks} = GitAgent.blame(agent, "README.md")
+      assert length(hunks) >= 2
+
+      assert Enum.all?(
+               hunks,
+               &match?(%{oid: _, start_line: _, line_count: _, author_name: _}, &1)
+             )
+    end
+
+    test "returns error for non-existent path", %{agent: agent} do
+      assert {:error, _reason} = GitAgent.blame(agent, "no_such_file.txt")
+    end
+  end
+
   describe "graph_ahead_behind/3" do
     test "feature is 1 ahead and 0 behind main", %{agent: agent} do
       {:ok, main_ref} = GitAgent.branch(agent, "main")

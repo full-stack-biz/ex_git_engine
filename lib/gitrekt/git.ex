@@ -1302,6 +1302,18 @@ defmodule GitRekt.Git do
     end
   end
 
+  @doc """
+  Returns blame hunks for `path` in `repo`.
+
+  Each hunk is a tuple `{oid, start_line, line_count, author_name, author_email, timestamp}` where
+  `start_line` is 1-based, and `timestamp` is Unix seconds.
+  """
+  @spec blame_file(repo, Path.t()) ::
+          {:ok, [{binary, pos_integer, pos_integer, binary, binary, integer}]} | {:error, term}
+  def blame_file(_repo, _path) do
+    :erlang.nif_error(:not_loaded)
+  end
+
   @spec tree_stream_next({tree, non_neg_integer}) ::
           {[{integer, atom, oid, binary}], {tree, non_neg_integer}}
           | {:halt, {tree, non_neg_integer}}

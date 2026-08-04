@@ -21,6 +21,7 @@
 #include "pack.h"
 #include "worktree.h"
 #include "merge.h"
+#include "blame.h"
 #include "geef.h"
 #include <stdio.h>
 #include <string.h>
@@ -404,6 +405,7 @@ static ErlNifFunc geef_funcs[] =
 	{"worktree_prune", 1, geef_worktree_prune, 0},
 	{"merge_commits", 3, geef_merge_commits, 0},
 	{"merge_base", 3, geef_merge_base, 0},
+	{"blame_file", 2, geef_blame_file, ERL_NIF_DIRTY_JOB_IO_BOUND},
 };
 
 ERL_NIF_INIT(Elixir.GitRekt.Git, geef_funcs, load, NULL, upgrade, unload)
