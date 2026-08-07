@@ -53,7 +53,8 @@ defmodule ExGitEngine.Mixfile do
       {:telemetry, "~> 1.1"},
       {:credo, "~> 1.0", only: [:dev, :test], runtime: false},
       {:ex_dna, "~> 1.0", only: [:dev, :test], runtime: false},
-      {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false}
+      {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end
 
