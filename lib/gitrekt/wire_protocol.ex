@@ -427,8 +427,10 @@ defmodule GitRekt.WireProtocol do
           <<data::bytes-size(^data_size)>> ->
             {[data], ""}
         end
+
       {payload_size, ""} ->
         raise "Invalid PKT-LINE size #{payload_size}: must be > 4 bytes"
+
       :error ->
         # TODO
         raise "Invalid PKT line #{inspect(pkt)}"

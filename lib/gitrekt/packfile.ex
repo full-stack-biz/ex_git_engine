@@ -5,8 +5,8 @@ defmodule GitRekt.Packfile do
 
   import Bitwise
 
-  alias GitRekt.Git
   alias GitRekt.Config
+  alias GitRekt.Git
 
   @type obj :: {Git.obj_type(), binary}
   @type obj_iter :: {non_neg_integer, non_neg_integer, binary}
@@ -147,6 +147,7 @@ defmodule GitRekt.Packfile do
 
   defp validate_object_size(size) do
     max_size = Config.max_object_size()
+
     if size > max_size do
       raise "PACK object size #{size} exceeds maximum allowed size #{max_size}"
     end

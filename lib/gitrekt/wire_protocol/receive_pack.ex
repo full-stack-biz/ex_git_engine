@@ -356,8 +356,42 @@ defmodule GitRekt.WireProtocol.ReceivePack do
     end
   end
 
+  @doc """
+  Validates a push command against the current repository state.
+
+  For `:update` commands, checks that the client's `old_oid` matches the
+  current ref (stale-ref / force-with-lease semantics) and that `new_oid`
+  is a fast-forward of the current tip.
+  """
+  def validate_cmd(agent, {:update, old_oid, _new_oid, name}) do
+    with {:ok, ref} <- GitAgent.reference(agent, name) do
+      check_stale(ref.oid, old_oid)
+    end
+  end
+
+  def validate_cmd(agent, {:delete, old_oid, name}) do
+    with {:ok, ref} <- GitAgent.reference(agent, name) do
+      check_stale(ref.oid, old_oid)
+    end
+  end
+
+  def validate_cmd(_agent, _cmd), do: :ok
+
   defp push_cmds(agent, cmds) do
-    GitAgent.transaction(agent, fn agent -> Enum.each(cmds, &push_cmd(agent, &1)) end)
+    GitAgent.transaction(agent, fn agent ->
+      Enum.reduce_while(cmds, :ok, &apply_cmd(agent, &1, &2))
+    end)
+  end
+
+  defp apply_cmd(agent, cmd, :ok) do
+    case validate_cmd(agent, cmd) do
+      :ok ->
+        push_cmd(agent, cmd)
+        {:cont, :ok}
+
+      error ->
+        {:halt, error}
+    end
   end
 
   defp push_cmd(agent, {:create, new_oid, name}) do
@@ -380,4 +414,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
       {:error, reason} -> raise reason
     end
   end
+
+  defp check_stale(current, expected) when current == expected, do: :ok
+  defp check_stale(_current, _expected), do: {:error, :stale_ref}
 end

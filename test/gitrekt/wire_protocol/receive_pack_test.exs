@@ -1,7 +1,7 @@
 defmodule GitRekt.WireProtocol.ReceivePackTest do
   use ExUnit.Case, async: true
 
-  alias GitRekt.Git
+  alias GitRekt.{Git, GitAgent}
   alias GitRekt.WireProtocol.ReceivePack
 
   describe "report_status/1" do
@@ -773,6 +773,188 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
 
       # Already-wrapped sideband should pass through pkt_line unchanged
       assert String.match?(result, ~r/^[0-9a-f]{4}\x02hook output\n$/)
+    end
+  end
+
+  describe "full protocol chain (handle_push_cmds)" do
+    setup do
+      make_repo = fn ->
+        path = Path.join(System.tmp_dir(), "gitrekt-chain-#{:erlang.unique_integer()}")
+        File.mkdir_p!(path)
+        cmd = fn args -> System.cmd("git", ["-C", path | args], stderr_to_stdout: true) end
+        cmd.(["init", "--initial-branch=main"])
+        cmd.(["config", "user.email", "test@example.com"])
+        cmd.(["config", "user.name", "Test"])
+        File.write!(Path.join(path, "file.txt"), "v1\n")
+        cmd.(["add", "."])
+        cmd.(["commit", "-m", "initial"])
+        {oid_a, 0} = cmd.(["rev-parse", "HEAD"])
+        {path, String.trim(oid_a)}
+      end
+
+      # Server: bare repo with initial commit A
+      server_path = Path.join(System.tmp_dir(), "gitrekt-chain-srv-#{:erlang.unique_integer()}")
+      File.mkdir_p!(server_path)
+
+      System.cmd("git", ["-C", server_path, "init", "--bare", "--initial-branch=main"],
+        stderr_to_stdout: true
+      )
+
+      {client_path, oid_a_str} = make_repo.()
+      System.cmd("git", ["-C", client_path, "push", server_path, "main"], stderr_to_stdout: true)
+
+      oid_a = Git.oid_parse(oid_a_str)
+
+      # Client: add a diverging commit B (amend → different history)
+      File.write!(Path.join(client_path, "file.txt"), "v2\n")
+
+      cmd_c = fn args ->
+        System.cmd("git", ["-C", client_path | args], stderr_to_stdout: true)
+      end
+
+      cmd_c.(["add", "."])
+      cmd_c.(["commit", "-m", "force commit"])
+      {oid_b_str, 0} = cmd_c.(["rev-parse", "HEAD"])
+      oid_b = Git.oid_parse(String.trim(oid_b_str))
+
+      # Fetch B's objects into server ODB without touching refs
+      System.cmd("git", ["-C", server_path, "fetch", client_path, "main"], stderr_to_stdout: true)
+
+      {:ok, agent} = GitAgent.start_link(server_path)
+
+      on_exit(fn ->
+        if Process.alive?(agent), do: GenServer.stop(agent)
+        File.rm_rf!(server_path)
+        File.rm_rf!(client_path)
+      end)
+
+      %{agent: agent, oid_a: oid_a, oid_b: oid_b}
+    end
+
+    defp done_handle(agent, cmds) do
+      %ReceivePack{
+        state: :done,
+        agent: agent,
+        repo: nil,
+        cmds: cmds,
+        writepack: nil,
+        writepack_progress: %{received_bytes: 0},
+        client_caps: ["report-status"],
+        advertised_caps: ["report-status"]
+      }
+    end
+
+    test "force push (non-ff, correct old_oid) updates the ref",
+         %{agent: agent, oid_a: oid_a, oid_b: oid_b} do
+      handle = done_handle(agent, [{:update, oid_a, oid_b, "refs/heads/main"}])
+      {_h, [], output} = ReceivePack.next(handle, [])
+
+      assert {:unpack, "ok"} in output
+      assert {:ok, ref} = GitAgent.reference(agent, "refs/heads/main")
+      assert ref.oid == oid_b
+    end
+
+    test "stale ref update is rejected and ref is unchanged",
+         %{agent: agent, oid_a: oid_a, oid_b: oid_b} do
+      # Claim oid_b is current but server has oid_a
+      handle = done_handle(agent, [{:update, oid_b, oid_a, "refs/heads/main"}])
+      {_h, [], output} = ReceivePack.next(handle, [])
+
+      refute {:unpack, "ok"} in output
+      assert {:ok, ref} = GitAgent.reference(agent, "refs/heads/main")
+      assert ref.oid == oid_a
+    end
+
+    test "stale ref delete is rejected and ref is unchanged",
+         %{agent: agent, oid_a: oid_a, oid_b: oid_b} do
+      handle = done_handle(agent, [{:delete, oid_b, "refs/heads/main"}])
+      {_h, [], output} = ReceivePack.next(handle, [])
+
+      refute {:unpack, "ok"} in output
+      assert {:ok, ref} = GitAgent.reference(agent, "refs/heads/main")
+      assert ref.oid == oid_a
+    end
+  end
+
+  describe "validate_cmd/2" do
+    setup do
+      make_repo = fn ->
+        path = Path.join(System.tmp_dir(), "gitrekt-rv-#{:erlang.unique_integer()}")
+        File.mkdir_p!(path)
+        cmd = fn args -> System.cmd("git", ["-C", path | args], stderr_to_stdout: true) end
+        cmd.(["init"])
+        cmd.(["config", "user.email", "test@example.com"])
+        cmd.(["config", "user.name", "Test"])
+        File.write!(Path.join(path, "file.txt"), "v1\n")
+        cmd.(["add", "."])
+        cmd.(["commit", "-m", "commit A"])
+        {oid_a, 0} = cmd.(["rev-parse", "HEAD"])
+        File.write!(Path.join(path, "file.txt"), "v2\n")
+        cmd.(["add", "."])
+        cmd.(["commit", "-m", "commit B"])
+        {oid_b, 0} = cmd.(["rev-parse", "HEAD"])
+        {path, Git.oid_parse(String.trim(oid_a)), Git.oid_parse(String.trim(oid_b))}
+      end
+
+      # Repo where main is at A (B exists but main reset back)
+      {path_a, oid_a, oid_b} = make_repo.()
+      System.cmd("git", ["-C", path_a, "reset", "--hard", "HEAD~1"], stderr_to_stdout: true)
+      {:ok, agent_at_a} = GitAgent.start_link(path_a)
+
+      # Separate repo where main stays at B (for non-ff test)
+      {path_b, oid_a_b, oid_b_b} = make_repo.()
+      {:ok, agent_at_b} = GitAgent.start_link(path_b)
+
+      on_exit(fn ->
+        for {agent, path} <- [{agent_at_a, path_a}, {agent_at_b, path_b}] do
+          if Process.alive?(agent), do: GenServer.stop(agent)
+          File.rm_rf!(path)
+        end
+      end)
+
+      %{
+        agent_at_a: agent_at_a,
+        oid_a: oid_a,
+        oid_b: oid_b,
+        agent_at_b: agent_at_b,
+        oid_a_b: oid_a_b,
+        oid_b_b: oid_b_b
+      }
+    end
+
+    test "fast-forward update with matching old_oid is accepted",
+         %{agent_at_a: agent, oid_a: oid_a, oid_b: oid_b} do
+      assert :ok = ReceivePack.validate_cmd(agent, {:update, oid_a, oid_b, "refs/heads/main"})
+    end
+
+    test "update with stale old_oid is rejected",
+         %{agent_at_a: agent, oid_a: oid_a, oid_b: oid_b} do
+      # main is at A; client claims current is B (wrong)
+      assert {:error, :stale_ref} =
+               ReceivePack.validate_cmd(agent, {:update, oid_b, oid_a, "refs/heads/main"})
+    end
+
+    test "non-fast-forward update is accepted (ff enforcement belongs in pre_push hook)",
+         %{agent_at_b: agent, oid_a_b: oid_a, oid_b_b: oid_b} do
+      # main is at B; push B→A — stale check passes, no ff check at protocol level
+      assert :ok = ReceivePack.validate_cmd(agent, {:update, oid_b, oid_a, "refs/heads/main"})
+    end
+
+    test "create command is always accepted",
+         %{agent_at_a: agent, oid_a: oid_a} do
+      assert :ok = ReceivePack.validate_cmd(agent, {:create, oid_a, "refs/heads/new"})
+    end
+
+    test "delete with matching old_oid is accepted",
+         %{agent_at_a: agent, oid_a: oid_a} do
+      assert :ok = ReceivePack.validate_cmd(agent, {:delete, oid_a, "refs/heads/main"})
+    end
+
+    test "delete with stale old_oid is rejected",
+         %{agent_at_a: agent, oid_b: oid_b} do
+      # main is at A; client claims current is B (wrong)
+      assert {:error, :stale_ref} =
+               ReceivePack.validate_cmd(agent, {:delete, oid_b, "refs/heads/main"})
     end
   end
 end
