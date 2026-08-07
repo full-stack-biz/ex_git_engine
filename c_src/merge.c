@@ -1,4 +1,4 @@
-#include "geef.h"
+#include "ex_git_engine.h"
 #include "merge.h"
 #include "repository.h"
 #include "object.h"
@@ -7,27 +7,27 @@
 #include <git2.h>
 
 ERL_NIF_TERM
-geef_merge_commits(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_merge_commits(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	int error;
-	geef_repository *repo;
-	geef_object *our_commit, *their_commit;
-	geef_index *index;
+	git_engine_repository *repo;
+	git_engine_object *our_commit, *their_commit;
+	git_engine_index *index;
 	ERL_NIF_TERM term;
 	git_merge_options opts = GIT_MERGE_OPTIONS_INIT;
 
-	if (!enif_get_resource(env, argv[0], geef_repository_type, (void **) &repo))
+	if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **) &repo))
 		return enif_make_badarg(env);
 
-	if (!enif_get_resource(env, argv[1], geef_object_type, (void **) &our_commit))
+	if (!enif_get_resource(env, argv[1], git_engine_object_type, (void **) &our_commit))
 		return enif_make_badarg(env);
 
-	if (!enif_get_resource(env, argv[2], geef_object_type, (void **) &their_commit))
+	if (!enif_get_resource(env, argv[2], git_engine_object_type, (void **) &their_commit))
 		return enif_make_badarg(env);
 
-	index = enif_alloc_resource(geef_index_type, sizeof(geef_index));
+	index = enif_alloc_resource(git_engine_index_type, sizeof(git_engine_index));
 	if (!index)
-		return geef_oom(env);
+		return git_engine_oom(env);
 
 	error = git_merge_commits(&index->index, repo->repo,
 	                          (git_commit *) our_commit->obj,
@@ -36,7 +36,7 @@ geef_merge_commits(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 	if (error < 0) {
 		enif_release_resource(index);
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 	}
 
 	if (git_index_has_conflicts(index->index)) {
@@ -53,14 +53,14 @@ geef_merge_commits(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 }
 
 ERL_NIF_TERM
-geef_merge_base(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_merge_base(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	int error;
-	geef_repository *repo;
+	git_engine_repository *repo;
 	ErlNifBinary bin1, bin2, out;
 	git_oid oid1, oid2, base_oid;
 
-	if (!enif_get_resource(env, argv[0], geef_repository_type, (void **) &repo))
+	if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **) &repo))
 		return enif_make_badarg(env);
 
 	if (!enif_inspect_binary(env, argv[1], &bin1))
@@ -77,10 +77,10 @@ geef_merge_base(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 	error = git_merge_base(&base_oid, repo->repo, &oid1, &oid2);
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
-	if (geef_oid_bin(&out, &base_oid) < 0)
-		return geef_oom(env);
+	if (git_engine_oid_bin(&out, &base_oid) < 0)
+		return git_engine_oom(env);
 
 	return enif_make_tuple2(env, atoms.ok, enif_make_binary(env, &out));
 }

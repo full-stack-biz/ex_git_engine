@@ -1,13 +1,13 @@
-#include "geef.h"
+#include "ex_git_engine.h"
 #include "oid.h"
 #include "index.h"
 #include "object.h"
 #include <string.h>
 #include <git2.h>
 
-void geef_index_free(ErlNifEnv *env, void *cd)
+void git_engine_index_free(ErlNifEnv *env, void *cd)
 {
-	geef_index *index = (geef_index *) cd;
+	git_engine_index *index = (git_engine_index *) cd;
 	git_index_free(index->index);
 }
 
@@ -16,13 +16,13 @@ ERL_NIF_TERM entry_to_term(ErlNifEnv *env, const git_index_entry *entry)
 	ErlNifBinary id, path;
 	size_t len;
 
-	if (geef_oid_bin(&id, &entry->id) < 0)
-		return geef_oom(env);
+	if (git_engine_oid_bin(&id, &entry->id) < 0)
+		return git_engine_oom(env);
 
 	len = strlen(entry->path);
 	if (!enif_alloc_binary(len, &path)) {
 		enif_release_binary(&id);
-		return geef_oom(env);
+		return git_engine_oom(env);
 	}
 	memcpy(path.data, entry->path, len);
 
@@ -42,19 +42,19 @@ ERL_NIF_TERM entry_to_term(ErlNifEnv *env, const git_index_entry *entry)
 }
 
 ERL_NIF_TERM
-geef_index_new(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_index_new(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	int error;
-	geef_index *index;
+	git_engine_index *index;
 	ERL_NIF_TERM term;
 
-	index = enif_alloc_resource(geef_index_type, sizeof(geef_index));
+	index = enif_alloc_resource(git_engine_index_type, sizeof(git_engine_index));
 	if (!index)
-		return geef_oom(env);
+		return git_engine_oom(env);
 
 	error = git_index_new(&index->index);
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
 	term = enif_make_resource(env, index);
 	enif_release_resource(index);
@@ -63,35 +63,35 @@ geef_index_new(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 }
 
 ERL_NIF_TERM
-geef_index_write(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_index_write(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	int error;
-	geef_index *index;
+	git_engine_index *index;
 
-	if (!enif_get_resource(env, argv[0], geef_index_type, (void **) &index))
+	if (!enif_get_resource(env, argv[0], git_engine_index_type, (void **) &index))
 		return enif_make_badarg(env);
 
 	error = git_index_write(index->index);
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
 	return atoms.ok;
 }
 
 ERL_NIF_TERM
-geef_index_write_tree(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_index_write_tree(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-	geef_index *index;
-	geef_repository *repo;
+	git_engine_index *index;
+	git_engine_repository *repo;
 	ErlNifBinary bin;
 	git_oid id;
 	int error;
 
-	if (!enif_get_resource(env, argv[0], geef_index_type, (void **) &index))
+	if (!enif_get_resource(env, argv[0], git_engine_index_type, (void **) &index))
 		return enif_make_badarg(env);
 
 	if (argc == 2) {
-		if (!enif_get_resource(env, argv[1], geef_repository_type, (void **) &repo))
+		if (!enif_get_resource(env, argv[1], git_engine_repository_type, (void **) &repo))
 			return enif_make_badarg(env);
 
 		error = git_index_write_tree_to(&id, index->index, repo->repo);
@@ -100,45 +100,45 @@ geef_index_write_tree(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	}
 
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
-	if (geef_oid_bin(&bin, &id) < 0)
-		return geef_oom(env);
+	if (git_engine_oid_bin(&bin, &id) < 0)
+		return git_engine_oom(env);
 
 	return enif_make_tuple2(env, atoms.ok, enif_make_binary(env, &bin));
 }
 
 ERL_NIF_TERM
-geef_index_read_tree(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_index_read_tree(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	int error;
-	geef_index *index;
-	geef_object *tree;
+	git_engine_index *index;
+	git_engine_object *tree;
 
-	if (!enif_get_resource(env, argv[0], geef_index_type, (void **) &index))
+	if (!enif_get_resource(env, argv[0], git_engine_index_type, (void **) &index))
 		return enif_make_badarg(env);
 
-	if (!enif_get_resource(env, argv[1], geef_object_type, (void **) &tree))
+	if (!enif_get_resource(env, argv[1], git_engine_object_type, (void **) &tree))
 		return enif_make_badarg(env);
 
 	error = git_index_read_tree(index->index, (git_tree *)tree->obj);
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
 	return atoms.ok;
 }
 
 ERL_NIF_TERM
-geef_index_add(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_index_add(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-	geef_index *index;
+	git_engine_index *index;
 	const ERL_NIF_TERM *eentry;
 	int arity, error;
 	unsigned int tmp;
 	ErlNifBinary path, id;
 	git_index_entry entry;
 
-	if (!enif_get_resource(env, argv[0], geef_index_type, (void **) &index))
+	if (!enif_get_resource(env, argv[0], git_engine_index_type, (void **) &index))
 		return enif_make_badarg(env);
 
 	if (!enif_get_tuple(env, argv[1], &arity, &eentry))
@@ -193,8 +193,8 @@ geef_index_add(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (!enif_inspect_binary(env, eentry[11], &path))
 		return enif_make_badarg(env);
 
-	if (!geef_terminate_binary(&path))
-		return geef_oom(env);
+	if (!git_engine_terminate_binary(&path))
+		return git_engine_oom(env);
 
 	entry.path = (char *) path.data;
 
@@ -205,20 +205,20 @@ geef_index_add(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 	error = git_index_add(index->index, &entry);
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
 	return atoms.ok;
 }
 
 ERL_NIF_TERM
-geef_index_remove(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_index_remove(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	int error;
-	geef_index *index;
+	git_engine_index *index;
 	ErlNifBinary path;
 	unsigned int stage;
 
-	if (!enif_get_resource(env, argv[0], geef_index_type, (void **) &index))
+	if (!enif_get_resource(env, argv[0], git_engine_index_type, (void **) &index))
 		return enif_make_badarg(env);
 
 	if (!enif_get_uint(env, argv[2], &stage))
@@ -227,28 +227,28 @@ geef_index_remove(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (!enif_inspect_binary(env, argv[1], &path))
 		return enif_make_badarg(env);
 
-	if (geef_terminate_binary(&path) < 0) {
+	if (git_engine_terminate_binary(&path) < 0) {
 		enif_release_binary(&path);
-		return geef_oom(env);
+		return git_engine_oom(env);
 	}
 
 	error = git_index_remove(index->index, (char *) path.data, stage);
 	enif_release_binary(&path);
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
 	return atoms.ok;
 }
 
 ERL_NIF_TERM
-geef_index_remove_dir(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_index_remove_dir(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	int error;
-	geef_index *index;
+	git_engine_index *index;
 	ErlNifBinary path;
 	unsigned int stage;
 
-	if (!enif_get_resource(env, argv[0], geef_index_type, (void **) &index))
+	if (!enif_get_resource(env, argv[0], git_engine_index_type, (void **) &index))
 		return enif_make_badarg(env);
 
 	if (!enif_get_uint(env, argv[2], &stage))
@@ -257,38 +257,38 @@ geef_index_remove_dir(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (!enif_inspect_binary(env, argv[1], &path))
 		return enif_make_badarg(env);
 
-	if (geef_terminate_binary(&path) < 0) {
+	if (git_engine_terminate_binary(&path) < 0) {
 		enif_release_binary(&path);
-		return geef_oom(env);
+		return git_engine_oom(env);
 	}
 
 	error = git_index_remove_directory(index->index, (char *) path.data, stage);
 	enif_release_binary(&path);
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
 	return atoms.ok;
 }
 
 ERL_NIF_TERM
-geef_index_count(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_index_count(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-	geef_index *index;
+	git_engine_index *index;
 
-	if (!enif_get_resource(env, argv[0], geef_index_type, (void **) &index))
+	if (!enif_get_resource(env, argv[0], git_engine_index_type, (void **) &index))
 		return enif_make_badarg(env);
 
 	return enif_make_uint(env, git_index_entrycount(index->index));
 }
 
 ERL_NIF_TERM
-geef_index_nth(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_index_nth(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	size_t nth;
-	geef_index *index;
+	git_engine_index *index;
 	const git_index_entry *entry;
 
-	if (!enif_get_resource(env, argv[0], geef_index_type, (void **) &index))
+	if (!enif_get_resource(env, argv[0], git_engine_index_type, (void **) &index))
 		return enif_make_badarg(env);
 
 	if (!enif_get_ulong(env, argv[1], &nth))
@@ -296,20 +296,20 @@ geef_index_nth(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 	entry = git_index_get_byindex(index->index, nth);
 	if (entry == NULL)
-		return geef_error(env);
+		return git_engine_error(env);
 
 	return entry_to_term(env, entry);
 }
 
 ERL_NIF_TERM
-geef_index_get(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_index_get(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	unsigned int stage;
 	ErlNifBinary path;
-	geef_index *index;
+	git_engine_index *index;
 	const git_index_entry *entry;
 
-	if (!enif_get_resource(env, argv[0], geef_index_type, (void **) &index))
+	if (!enif_get_resource(env, argv[0], git_engine_index_type, (void **) &index))
 		return enif_make_badarg(env);
 
 	if (!enif_get_uint(env, argv[2], &stage))
@@ -318,25 +318,25 @@ geef_index_get(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (!enif_inspect_binary(env, argv[1], &path))
 		return enif_make_badarg(env);
 
-	if (geef_terminate_binary(&path) < 0) {
+	if (git_engine_terminate_binary(&path) < 0) {
 		enif_release_binary(&path);
-		return geef_oom(env);
+		return git_engine_oom(env);
 	}
 
 	entry = git_index_get_bypath(index->index, (char *) path.data, stage);
 	enif_release_binary(&path);
 	if (entry == NULL)
-		return geef_error(env);
+		return git_engine_error(env);
 
 	return entry_to_term(env, entry);
 }
 
 ERL_NIF_TERM
-geef_index_clear(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_index_clear(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-	geef_index *index;
+	git_engine_index *index;
 
-	if (!enif_get_resource(env, argv[0], geef_index_type, (void **) &index))
+	if (!enif_get_resource(env, argv[0], git_engine_index_type, (void **) &index))
 		return enif_make_badarg(env);
 
 	git_index_clear(index->index);

@@ -1,4 +1,4 @@
-defmodule GitRekt.WireProtocol do
+defmodule ExGitEngine.WireProtocol do
   @moduledoc """
   Conveniences for Git transport protocol and server side commands.
 
@@ -16,10 +16,10 @@ defmodule GitRekt.WireProtocol do
 
   require Logger
 
-  alias GitRekt.Git
-  alias GitRekt.GitAgent
-  alias GitRekt.GitRef
-  alias GitRekt.WireProtocol.ReceivePack
+  alias ExGitEngine.Git
+  alias ExGitEngine.GitAgent
+  alias ExGitEngine.GitRef
+  alias ExGitEngine.WireProtocol.ReceivePack
 
   @upload_caps ~w(multi_ack multi_ack_detailed ofs-delta side-band side-band-64k)
   @receive_caps ~w(report-status report-status-v2 delete-refs ofs-delta atomic side-band-64k)
@@ -232,8 +232,8 @@ defmodule GitRekt.WireProtocol do
       String.pad_leading(Integer.to_string(byte_size(data) + 5, 16) |> String.downcase(), 4, "0") <>
         data <> "\n"
 
-  defp __type__(%{__struct__: GitRekt.WireProtocol.UploadPack}), do: :upload_pack
-  defp __type__(%{__struct__: GitRekt.WireProtocol.ReceivePack}), do: :receive_pack
+  defp __type__(%{__struct__: ExGitEngine.WireProtocol.UploadPack}), do: :upload_pack
+  defp __type__(%{__struct__: ExGitEngine.WireProtocol.ReceivePack}), do: :receive_pack
 
   #
   # Helpers
@@ -299,13 +299,13 @@ defmodule GitRekt.WireProtocol do
     end)
   end
 
-  defp exec_impl("git-upload-pack"), do: GitRekt.WireProtocol.UploadPack
-  defp exec_impl("git-receive-pack"), do: GitRekt.WireProtocol.ReceivePack
+  defp exec_impl("git-upload-pack"), do: ExGitEngine.WireProtocol.UploadPack
+  defp exec_impl("git-receive-pack"), do: ExGitEngine.WireProtocol.ReceivePack
 
   defp telemetry_start(_service, :buffer, _ref), do: :ok
 
   defp telemetry_start(service, state, ref) do
-    :telemetry.execute([:gitrekt, :wire_protocol, :start], %{}, %{
+    :telemetry.execute([:ex_git_engine, :wire_protocol, :start], %{}, %{
       ref: ref,
       service: __type__(service),
       state: state
@@ -316,7 +316,7 @@ defmodule GitRekt.WireProtocol do
 
   defp telemetry_stop(service, state, ref, event_time) do
     :telemetry.execute(
-      [:gitrekt, :wire_protocol, :stop],
+      [:ex_git_engine, :wire_protocol, :stop],
       %{duration: :os.system_time(:microsecond) - event_time},
       %{ref: ref, service: __type__(service), state: state}
     )
@@ -332,7 +332,7 @@ defmodule GitRekt.WireProtocol do
   @doc """
   Returns the agent capability string for gitrekt.
   """
-  def server_agent_capability, do: "agent=gitrekt/#{Application.spec(:gitrekt, :vsn)}"
+  def server_agent_capability, do: "agent=ex_git_engine/#{Application.spec(:ex_git_engine, :vsn)}"
 
   @doc """
   Returns the list of server capabilities for the given service.

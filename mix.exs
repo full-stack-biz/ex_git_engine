@@ -1,9 +1,9 @@
-defmodule GitRekt.Mixfile do
+defmodule ExGitEngine.Mixfile do
   use Mix.Project
 
   def project do
     [
-      app: :gitrekt,
+      app: :ex_git_engine,
       version: "0.3.9",
       build_path: "_build",
       config_path: "config/config.exs",

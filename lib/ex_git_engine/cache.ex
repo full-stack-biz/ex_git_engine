@@ -1,4 +1,4 @@
-defmodule GitRekt.Cache do
+defmodule ExGitEngine.Cache do
   @moduledoc """
   Behaviour for caching Git operations.
   """

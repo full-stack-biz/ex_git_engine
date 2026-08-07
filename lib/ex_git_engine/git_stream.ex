@@ -1,4 +1,4 @@
-defmodule GitRekt.GitStream do
+defmodule ExGitEngine.GitStream do
   @moduledoc """
   Functions for creating and transforming Git streamable resources.
   """

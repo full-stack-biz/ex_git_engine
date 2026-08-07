@@ -1,12 +1,12 @@
-defmodule GitRekt.GitAgent do
+defmodule ExGitEngine.GitAgent do
   @moduledoc ~S"""
   High-level API for running Git commands on a repository.
 
-  This module provides an API to manipulate Git repositories. In contrast to `GitRekt.Git`, it offers
+  This module provides an API to manipulate Git repositories. In contrast to `ExGitEngine.Git`, it offers
   an abstraction for serializing Git commands via message passing. By doing so it allows multiple processes
-  to manipulate a single repository simultaneously (see “Thread safety” in `GitRekt.Git` module).
+  to manipulate a single repository simultaneously (see “Thread safety” in `ExGitEngine.Git` module).
 
-  At it core `GitRekt.GitAgent` implements `GenServer`. Therefore it makes it easy to fit into a supervision
+  At it core `ExGitEngine.GitAgent` implements `GenServer`. Therefore it makes it easy to fit into a supervision
   tree and furthermore, in a distributed environment.
 
   An other major benefit is support for caching command results. In their nature Git objects are immutable;
@@ -15,10 +15,10 @@ defmodule GitRekt.GitAgent do
 
   ## Example
 
-  Let's start by rewriting the example exposed in the `GitRekt.Git` module:
+  Let's start by rewriting the example exposed in the `ExGitEngine.Git` module:
 
   ```elixir
-  alias GitRekt.GitAgent
+  alias ExGitEngine.GitAgent
 
   # load repository
   {:ok, agent} = GitAgent.start_link("tmp/my-repo.git")
@@ -42,8 +42,8 @@ defmodule GitRekt.GitAgent do
   You might have noticed that the first argument of each Git function is `agent`. In our example the agent is
   a PID referencing a dedicated process started with `start_link/1`.
 
-  Note that replacing `start_link/1` with `GitRekt.Git.repository_open/1` would print the exact same output.
-  This works because `t:agent/0` can be either a process id (PID) or a `t:GitRekt.Git.repo/0`.
+  Note that replacing `start_link/1` with `ExGitEngine.Git.repository_open/1` would print the exact same output.
+  This works because `t:agent/0` can be either a process id (PID) or a `t:ExGitEngine.Git.repo/0`.
 
   ## Transactions
 
@@ -89,7 +89,7 @@ defmodule GitRekt.GitAgent do
   end
   ```
 
-  By passing a cache key as 2nd argument, we tell `GitRekt.GitAgent` to leverage caching for the transaction.
+  By passing a cache key as 2nd argument, we tell `ExGitEngine.GitAgent` to leverage caching for the transaction.
   In our case we are using the commit oid to store and retrieve additional informations.
 
   Here's the log output for two consecutive `commit_info/2` calls with the same commit:
@@ -113,7 +113,7 @@ defmodule GitRekt.GitAgent do
   ## Lazy enumerables
 
   Functions such as `references/2`, `history/3`, `tree_entries/3`, `commit_parents/2` return streamable
-  Git resources (see `GitRekt.GitStream`). Due to their laziness, these functions do not actually compute any
+  Git resources (see `ExGitEngine.GitStream`). Due to their laziness, these functions do not actually compute any
   operations. Instead they return a stream meant to be enumerated at a later moment.
 
   Here's a brief example:
@@ -167,7 +167,7 @@ defmodule GitRekt.GitAgent do
   ...
   ```
 
-  To understand how `GitRekt.GitAgent` handles streams, the 2nd and third lines are quite relevant:
+  To understand how `ExGitEngine.GitAgent` handles streams, the 2nd and third lines are quite relevant:
 
   ```log
   [debug] [Git Agent] history(<GitRef:refs/heads/master>, [], stream_chunk_size: 1000) executed in 1.52 ms
@@ -179,9 +179,9 @@ defmodule GitRekt.GitAgent do
   commits event though we only asked for 10. We'll solve that mistery in a bit but first, let's see
   what's happening under the hood.
 
-  Internally, `GitRekt.GitAgent` ensures that the stream computation happens on the dedicated `agent`
+  Internally, `ExGitEngine.GitAgent` ensures that the stream computation happens on the dedicated `agent`
   process. This involves streaming items between processes.
-  Each time you pull data from the `GitRekt.GitStream`, an internal `GenServer.call/2` will fetch new
+  Each time you pull data from the `ExGitEngine.GitStream`, an internal `GenServer.call/2` will fetch new
   data from the associated `agent`. This happens in a seamless and transparent manner.
 
   Stream related functions like `history/3` take an optional `:stream_chunk_size` option which is used
@@ -216,22 +216,22 @@ defmodule GitRekt.GitAgent do
 
   A small note about memory management and garbage collection.
 
-  The basic idea behind `GitRekt.GitAgent` is to provide a enhanced experience for `GitRekt.Git` functions
+  The basic idea behind `ExGitEngine.GitAgent` is to provide a enhanced experience for `ExGitEngine.Git` functions
   by running commands on a repository in a dedicated `GenServer`.
 
   You pay a small latency penalty due to process comunication but have a safe way for interacting with
   repositories in a concurrent environment out of the box.
 
   Erlang relies on a reference counting garbage collection for NIF resources. This implies that resources
-  such as `GitRekt.GitCommit`, `GitRekt.GitTag`, `GitRekt.GitBlob`, and `GitRekt.GitTree` are not deallocated
+  such as `ExGitEngine.GitCommit`, `ExGitEngine.GitTag`, `ExGitEngine.GitBlob`, and `ExGitEngine.GitTree` are not deallocated
   until the last reference is garbage collected by the VM.
 
-  Note that this does not apply accross nodes. But don't worry, `GitRekt.GitAgent` has you covered and will
+  Note that this does not apply accross nodes. But don't worry, `ExGitEngine.GitAgent` has you covered and will
   automatically track resources for client processes running on different nodes for you.
   """
   use GenServer
 
-  alias GitRekt.{
+  alias ExGitEngine.{
     Git,
     GitBlob,
     GitCommit,
@@ -249,7 +249,7 @@ defmodule GitRekt.GitAgent do
     GitWritePack
   }
 
-  @behaviour GitRekt.Cache
+  @behaviour ExGitEngine.Cache
 
   @type agent :: pid | Git.repo()
 
@@ -257,7 +257,7 @@ defmodule GitRekt.GitAgent do
   @type git_revision :: GitRef.t() | GitTag.t() | GitCommit.t()
 
   @default_config Map.new(
-                    Application.compile_env(:gitrekt, __MODULE__, %{
+                    Application.compile_env(:ex_git_engine, __MODULE__, %{
                       stream_chunk_size: 1_000,
                       timeout: 5_000,
                       idle_timeout: :infinity
@@ -1239,7 +1239,7 @@ defmodule GitRekt.GitAgent do
 
   defp call_cache(handle, op, cache, pid) do
     cache_adapter =
-      Keyword.get(Application.get_env(:gitrekt, __MODULE__, []), :cache_adapter, __MODULE__)
+      Keyword.get(Application.get_env(:ex_git_engine, __MODULE__, []), :cache_adapter, __MODULE__)
 
     case cache_adapter.make_cache_key(op) do
       cache_key when is_binary(cache_key) ->
@@ -1341,7 +1341,7 @@ defmodule GitRekt.GitAgent do
     {name, args} = map_operation(op)
 
     :telemetry.execute(
-      [:gitrekt, :git_agent, event_name],
+      [:ex_git_engine, :git_agent, event_name],
       measurements,
       Map.merge(%{op: name, args: args}, meta)
     )

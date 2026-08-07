@@ -1,43 +1,43 @@
 #include <string.h>
 #include <git2.h>
-#include "geef.h"
+#include "ex_git_engine.h"
 #include "repository.h"
 #include "oid.h"
 #include "object.h"
 #include "revparse.h"
 
 ERL_NIF_TERM
-geef_revparse_single(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_revparse_single(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	int error;
 	ErlNifBinary bin, id;
-	geef_repository *repo;
-	geef_object *obj;
+	git_engine_repository *repo;
+	git_engine_object *obj;
 	ERL_NIF_TERM type, term_obj;
 
-	if (!enif_get_resource(env, argv[0], geef_repository_type, (void **) &repo))
+	if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **) &repo))
 		return enif_make_badarg(env);
 
 	if (!enif_inspect_binary(env, argv[1], &bin))
 		return enif_make_badarg(env);
 
-	if (geef_terminate_binary(&bin) < 0)
-		return geef_oom(env);
+	if (git_engine_terminate_binary(&bin) < 0)
+		return git_engine_oom(env);
 
-	obj = enif_alloc_resource(geef_object_type, sizeof(geef_object));
+	obj = enif_alloc_resource(git_engine_object_type, sizeof(git_engine_object));
 	if (!obj)
-		return geef_oom(env);
+		return git_engine_oom(env);
 
 	error = git_revparse_single(&obj->obj, repo->repo, (char *) bin.data);
 	if (error < 0) {
 		enif_release_binary(&bin);
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 	}
 
-	type = geef_object_type2atom(git_object_type(obj->obj));
+	type = git_engine_object_type2atom(git_object_type(obj->obj));
 
-	if (geef_oid_bin(&id, git_object_id(obj->obj)) < 0)
-		return geef_oom(env);
+	if (git_engine_oid_bin(&id, git_object_id(obj->obj)) < 0)
+		return git_engine_oom(env);
 
 
 	term_obj = enif_make_resource(env, obj);
@@ -50,7 +50,7 @@ geef_revparse_single(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 }
 
 ERL_NIF_TERM
-geef_revparse_ext(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_revparse_ext(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	int error;
 	size_t len;
@@ -58,27 +58,27 @@ geef_revparse_ext(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	git_reference *ref = NULL;
 
 	ErlNifBinary bin, id;
-	geef_repository *repo;
-	geef_object *obj;
+	git_engine_repository *repo;
+	git_engine_object *obj;
 	ERL_NIF_TERM type, term_obj;
 
-	if (!enif_get_resource(env, argv[0], geef_repository_type, (void **) &repo))
+	if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **) &repo))
 		return enif_make_badarg(env);
 
 	if (!enif_inspect_binary(env, argv[1], &bin))
 		return enif_make_badarg(env);
 
-	if (geef_terminate_binary(&bin) < 0)
-		return geef_oom(env);
+	if (git_engine_terminate_binary(&bin) < 0)
+		return git_engine_oom(env);
 
-	obj = enif_alloc_resource(geef_object_type, sizeof(geef_object));
+	obj = enif_alloc_resource(git_engine_object_type, sizeof(git_engine_object));
 	if (!obj)
-		return geef_oom(env);
+		return git_engine_oom(env);
 
 	error = git_revparse_ext(&obj->obj, &ref, repo->repo, (char *) bin.data);
 	if (error < 0) {
 		enif_release_binary(&bin);
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 	}
 
 	if (ref) {
@@ -87,17 +87,17 @@ geef_revparse_ext(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 		if (!enif_realloc_binary(&bin, len)) {
 			git_reference_free(ref);
 			enif_release_binary(&bin);
-			return geef_oom(env);
+			return git_engine_oom(env);
 		}
 
 		memcpy(bin.data, name, len);
 		git_reference_free(ref);
 	}
 
-	type = geef_object_type2atom(git_object_type(obj->obj));
+	type = git_engine_object_type2atom(git_object_type(obj->obj));
 
-	if (geef_oid_bin(&id, git_object_id(obj->obj)) < 0)
-		return geef_oom(env);
+	if (git_engine_oid_bin(&id, git_object_id(obj->obj)) < 0)
+		return git_engine_oom(env);
 
 	term_obj = enif_make_resource(env, obj);
 	enif_release_resource(obj);

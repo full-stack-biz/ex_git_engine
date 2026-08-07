@@ -1,10 +1,10 @@
-defmodule GitRekt.Config do
+defmodule ExGitEngine.Config do
   @moduledoc """
-  Configuration for GitRekt resource limits and security settings.
+  Configuration for ExGitEngine resource limits and security settings.
 
   Configuration can be overridden in the application environment:
 
-      config :gitrekt,
+      config :ex_git_engine,
         max_object_size: 100 * 1024 * 1024,
         max_pack_size: 1 * 1024 * 1024 * 1024
   """
@@ -18,7 +18,7 @@ defmodule GitRekt.Config do
   """
   @spec max_object_size :: pos_integer
   def max_object_size do
-    Application.get_env(:gitrekt, :max_object_size, 100 * 1024 * 1024)
+    Application.get_env(:ex_git_engine, :max_object_size, 100 * 1024 * 1024)
   end
 
   @doc """
@@ -30,6 +30,6 @@ defmodule GitRekt.Config do
   """
   @spec max_pack_size :: pos_integer
   def max_pack_size do
-    Application.get_env(:gitrekt, :max_pack_size, 1 * 1024 * 1024 * 1024)
+    Application.get_env(:ex_git_engine, :max_pack_size, 1 * 1024 * 1024 * 1024)
   end
 end

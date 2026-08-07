@@ -1,4 +1,4 @@
-defmodule GitRekt.Git do
+defmodule ExGitEngine.Git do
   @moduledoc ~S"""
   Erlang NIF that exposes a subset of *libgit2*'s library functions.
 
@@ -14,7 +14,7 @@ defmodule GitRekt.Git do
   Let's start with a basic code example showing the last commit author and message:
 
   ```elixir
-  alias GitRekt.Git
+  alias ExGitEngine.Git
 
   # load repository
   {:ok, repo} = Git.repository_open("/tmp/my-repo.git")
@@ -232,11 +232,11 @@ defmodule GitRekt.Git do
   processes simultaneously is not safe. These pointers should never be shared across processes.
 
   In order to access a repository in a concurrent manner, each process has to initialize it's own repository
-  resource using `repository_open/1`. Alternatively, the `GitRekt.GitAgent` module provides a similar API but
+  resource using `repository_open/1`. Alternatively, the `ExGitEngine.GitAgent` module provides a similar API but
   can use a dedicated process, so that its access can be serialized.
   """
 
-  alias GitRekt.GitStream
+  alias ExGitEngine.GitStream
 
   @type repo :: reference
 
@@ -1329,5 +1329,5 @@ defmodule GitRekt.Git do
     end
   end
 
-  defp nif_path, do: Path.join(:code.priv_dir(:gitrekt), "geef_nif")
+  defp nif_path, do: Path.join(:code.priv_dir(:ex_git_engine), "ex_git_engine_nif")
 end

@@ -1,7 +1,7 @@
-defmodule GitRekt do
+defmodule ExGitEngine do
   @moduledoc false
 
-  alias GitRekt.Git
+  alias ExGitEngine.Git
 
   defmodule GitCommit do
     @moduledoc """

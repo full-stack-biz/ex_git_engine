@@ -1,8 +1,8 @@
-defmodule GitRekt.WireProtocol.ReceivePackTest do
+defmodule ExGitEngine.WireProtocol.ReceivePackTest do
   use ExUnit.Case, async: true
 
-  alias GitRekt.{Git, GitAgent}
-  alias GitRekt.WireProtocol.ReceivePack
+  alias ExGitEngine.{Git, GitAgent}
+  alias ExGitEngine.WireProtocol.ReceivePack
 
   describe "report_status/1" do
     test "returns tuple protocol elements" do
@@ -240,7 +240,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
 
     test "advertised_caps includes ofs-delta and atomic capabilities" do
       # Verify that new capabilities are advertised by the server
-      advertised = GitRekt.WireProtocol.server_capabilities("git-receive-pack")
+      advertised = ExGitEngine.WireProtocol.server_capabilities("git-receive-pack")
 
       assert "report-status" in advertised
       assert "delete-refs" in advertised
@@ -249,14 +249,14 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
 
       assert String.contains?(
                Enum.find(advertised, "", &String.starts_with?(&1, "agent=")),
-               "gitrekt"
+               "ex_git_engine"
              )
     end
 
     test "validate_capabilities: binary flags require exact match" do
       advertised_caps = ["report-status", "delete-refs", "ofs-delta"]
       client_caps = ["report-status", "delete-refs"]
-      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+      unknown = ExGitEngine.WireProtocol.validate_capabilities(client_caps, advertised_caps)
 
       assert unknown == []
     end
@@ -264,7 +264,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     test "validate_capabilities: rejects unknown binary flags" do
       advertised_caps = ["report-status", "delete-refs"]
       client_caps = ["report-status", "unknown-flag"]
-      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+      unknown = ExGitEngine.WireProtocol.validate_capabilities(client_caps, advertised_caps)
 
       assert "unknown-flag" in unknown
     end
@@ -272,7 +272,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     test "validate_capabilities: allows agent capability with different value" do
       advertised_caps = ["report-status", "agent=gitrekt/1.0.0"]
       client_caps = ["report-status", "agent=git/2.54.0-Darwin"]
-      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+      unknown = ExGitEngine.WireProtocol.validate_capabilities(client_caps, advertised_caps)
 
       assert unknown == []
     end
@@ -281,7 +281,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
       advertised_caps = ["agent=gitrekt/1.0.0"]
       # Client can send any agent value, not just the one advertised
       client_caps = ["agent=custom/5.0.0-beta"]
-      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+      unknown = ExGitEngine.WireProtocol.validate_capabilities(client_caps, advertised_caps)
 
       assert unknown == []
     end
@@ -289,7 +289,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     test "validate_capabilities: allows session-id capability with different value" do
       advertised_caps = ["report-status", "session-id=server-123"]
       client_caps = ["report-status", "session-id=client-456"]
-      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+      unknown = ExGitEngine.WireProtocol.validate_capabilities(client_caps, advertised_caps)
 
       assert unknown == []
     end
@@ -297,7 +297,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     test "validate_capabilities: allows any session-id value from client" do
       advertised_caps = ["session-id=server-id"]
       client_caps = ["session-id=any-value-here"]
-      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+      unknown = ExGitEngine.WireProtocol.validate_capabilities(client_caps, advertised_caps)
 
       assert unknown == []
     end
@@ -305,7 +305,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     test "validate_capabilities: allows object-format from advertised set" do
       advertised_caps = ["report-status", "object-format=sha1", "object-format=sha256"]
       client_caps = ["report-status", "object-format=sha256"]
-      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+      unknown = ExGitEngine.WireProtocol.validate_capabilities(client_caps, advertised_caps)
 
       assert unknown == []
     end
@@ -313,7 +313,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     test "validate_capabilities: rejects object-format not in advertised set" do
       advertised_caps = ["report-status", "object-format=sha1"]
       client_caps = ["report-status", "object-format=sha256"]
-      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+      unknown = ExGitEngine.WireProtocol.validate_capabilities(client_caps, advertised_caps)
 
       assert "object-format=sha256" in unknown
     end
@@ -321,7 +321,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     test "validate_capabilities: rejects symref if client sends it (server-only)" do
       advertised_caps = ["symref=HEAD:refs/heads/main"]
       client_caps = ["symref=HEAD:refs/heads/develop"]
-      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+      unknown = ExGitEngine.WireProtocol.validate_capabilities(client_caps, advertised_caps)
 
       assert "symref=HEAD:refs/heads/develop" in unknown
     end
@@ -329,7 +329,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     test "validate_capabilities: mixed valid and invalid capabilities" do
       advertised_caps = ["report-status", "agent=gitrekt/1.0.0", "delete-refs"]
       client_caps = ["report-status", "agent=git/2.0.0", "delete-refs", "unknown-cap"]
-      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+      unknown = ExGitEngine.WireProtocol.validate_capabilities(client_caps, advertised_caps)
 
       assert length(unknown) == 1
       assert "unknown-cap" in unknown
@@ -341,7 +341,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     test "validate_capabilities: allows filter from advertised set" do
       advertised_caps = ["report-status", "filter=blob:none"]
       client_caps = ["report-status", "filter=blob:none"]
-      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+      unknown = ExGitEngine.WireProtocol.validate_capabilities(client_caps, advertised_caps)
 
       assert unknown == []
     end
@@ -349,7 +349,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     test "validate_capabilities: rejects filter not in advertised set" do
       advertised_caps = ["report-status", "filter=blob:none"]
       client_caps = ["report-status", "filter=tree:0"]
-      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+      unknown = ExGitEngine.WireProtocol.validate_capabilities(client_caps, advertised_caps)
 
       assert "filter=tree:0" in unknown
     end
@@ -357,7 +357,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     test "validate_capabilities: empty client capabilities is valid" do
       advertised_caps = ["report-status", "delete-refs"]
       client_caps = []
-      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+      unknown = ExGitEngine.WireProtocol.validate_capabilities(client_caps, advertised_caps)
 
       assert unknown == []
     end
@@ -381,20 +381,20 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
         "atomic"
       ]
 
-      unknown = GitRekt.WireProtocol.validate_capabilities(client_caps, advertised_caps)
+      unknown = ExGitEngine.WireProtocol.validate_capabilities(client_caps, advertised_caps)
       assert unknown == []
     end
   end
 
   describe "report-status-v2" do
     test "report-status-v2 is in server capabilities for git-receive-pack" do
-      caps = GitRekt.WireProtocol.server_capabilities("git-receive-pack")
+      caps = ExGitEngine.WireProtocol.server_capabilities("git-receive-pack")
       assert "report-status-v2" in caps
     end
 
     test "client sending report-status-v2 is not rejected as unknown" do
-      advertised = GitRekt.WireProtocol.server_capabilities("git-receive-pack")
-      unknown = GitRekt.WireProtocol.validate_capabilities(["report-status-v2"], advertised)
+      advertised = ExGitEngine.WireProtocol.server_capabilities("git-receive-pack")
+      unknown = ExGitEngine.WireProtocol.validate_capabilities(["report-status-v2"], advertised)
       assert unknown == []
     end
 
@@ -443,7 +443,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
     end
 
     test "skip disco->update_req sets advertised_caps to server capabilities" do
-      advertised_server = GitRekt.WireProtocol.server_capabilities("git-receive-pack")
+      advertised_server = ExGitEngine.WireProtocol.server_capabilities("git-receive-pack")
 
       handle = %ReceivePack{state: :disco, advertised_caps: []}
       skipped = ReceivePack.skip(handle)
@@ -487,33 +487,33 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
 
   describe "pkt_line with protocol tuple format" do
     test "{:unpack, \"ok\"} encodes to pkt-line" do
-      encoded = GitRekt.WireProtocol.pkt_line({:unpack, "ok"})
+      encoded = ExGitEngine.WireProtocol.pkt_line({:unpack, "ok"})
 
       assert "000e" <> "unpack ok\n" == encoded
     end
 
     test "{:ok, refname} encodes to pkt-line" do
-      encoded = GitRekt.WireProtocol.pkt_line({:ok, "refs/heads/main"})
+      encoded = ExGitEngine.WireProtocol.pkt_line({:ok, "refs/heads/main"})
 
       assert "0017" <> "ok refs/heads/main\n" == encoded
     end
 
     test "{:ng, refname, reason} encodes to pkt-line" do
-      encoded = GitRekt.WireProtocol.pkt_line({:ng, "refs/heads/main", "permission denied"})
+      encoded = ExGitEngine.WireProtocol.pkt_line({:ng, "refs/heads/main", "permission denied"})
 
       assert is_binary(encoded)
       assert String.contains?(encoded, "ng refs/heads/main permission denied")
     end
 
     test "{:sideband, channel, text} wraps with sideband and returns binary" do
-      encoded = GitRekt.WireProtocol.pkt_line({:sideband, 2, "Build passed"})
+      encoded = ExGitEngine.WireProtocol.pkt_line({:sideband, 2, "Build passed"})
 
       <<_size::binary-size(4), channel::binary-size(1), _rest::binary>> = encoded
       assert channel == <<2>>
     end
 
     test ":flush encodes to 0000" do
-      encoded = GitRekt.WireProtocol.pkt_line(:flush)
+      encoded = ExGitEngine.WireProtocol.pkt_line(:flush)
       assert "0000" == encoded
     end
   end
@@ -741,11 +741,11 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
       # Evidence: git source send-pack.c closes sideband demux before reading status
 
       caps_with_sideband = ["side-band-64k", "report-status"]
-      result_unpack = GitRekt.WireProtocol.pkt_line({:unpack, "ok"}, caps_with_sideband)
-      result_ok = GitRekt.WireProtocol.pkt_line({:ok, "refs/heads/main"}, caps_with_sideband)
+      result_unpack = ExGitEngine.WireProtocol.pkt_line({:unpack, "ok"}, caps_with_sideband)
+      result_ok = ExGitEngine.WireProtocol.pkt_line({:ok, "refs/heads/main"}, caps_with_sideband)
 
       result_ng =
-        GitRekt.WireProtocol.pkt_line(
+        ExGitEngine.WireProtocol.pkt_line(
           {:ng, "refs/heads/main", "non-fast-forward"},
           caps_with_sideband
         )
@@ -760,8 +760,8 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
       caps_with_sideband = ["side-band-64k"]
       caps_without = []
 
-      result_with = GitRekt.WireProtocol.pkt_line(:flush, caps_with_sideband)
-      result_without = GitRekt.WireProtocol.pkt_line(:flush, caps_without)
+      result_with = ExGitEngine.WireProtocol.pkt_line(:flush, caps_with_sideband)
+      result_without = ExGitEngine.WireProtocol.pkt_line(:flush, caps_without)
 
       assert result_with == "0000"
       assert result_without == "0000"
@@ -769,7 +769,7 @@ defmodule GitRekt.WireProtocol.ReceivePackTest do
 
     test "sideband tuple passed through unchanged" do
       caps = ["side-band-64k"]
-      result = GitRekt.WireProtocol.pkt_line({:sideband, 2, "hook output"}, caps)
+      result = ExGitEngine.WireProtocol.pkt_line({:sideband, 2, "hook output"}, caps)
 
       # Already-wrapped sideband should pass through pkt_line unchanged
       assert String.match?(result, ~r/^[0-9a-f]{4}\x02hook output\n$/)

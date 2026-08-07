@@ -1,12 +1,12 @@
-#ifndef GEEF_H
-#define GEEF_H
+#ifndef EX_GIT_ENGINE_H
+#define EX_GIT_ENGINE_H
 
 #include <git2.h>
 #include "erl_nif.h"
 
-ERL_NIF_TERM geef_error(ErlNifEnv *env);
-ERL_NIF_TERM geef_error_struct(ErlNifEnv *env, int code);
-ERL_NIF_TERM geef_oom(ErlNifEnv *env);
+ERL_NIF_TERM git_engine_error(ErlNifEnv *env);
+ERL_NIF_TERM git_engine_error_struct(ErlNifEnv *env, int code);
+ERL_NIF_TERM git_engine_oom(ErlNifEnv *env);
 
 typedef struct {
 	ERL_NIF_TERM ok;
@@ -54,15 +54,15 @@ typedef struct {
 	ERL_NIF_TERM ex;
 	ERL_NIF_TERM emsg;
 	ERL_NIF_TERM ecode;
-} geef_atoms;
+} git_engine_atoms;
 
-extern geef_atoms atoms;
+extern git_engine_atoms atoms;
 
 git_strarray git_strarray_from_list(ErlNifEnv *env, ERL_NIF_TERM list);
 
 /** NUL-terminate a binary */
-int geef_terminate_binary(ErlNifBinary *bin);
+int git_engine_terminate_binary(ErlNifBinary *bin);
 /** Copy a string into a binary */
-int geef_string_to_bin(ErlNifBinary *bin, const char *str);
+int git_engine_string_to_bin(ErlNifBinary *bin, const char *str);
 
 #endif

@@ -2,7 +2,7 @@
 #include <git2.h>
 
 #include "oid.h"
-#include "geef.h"
+#include "ex_git_engine.h"
 #include "repository.h"
 #include "reference.h"
 #include "object.h"
@@ -15,7 +15,7 @@ static int ref_target(ERL_NIF_TERM *out, ErlNifEnv *env, git_reference *ref)
 		const git_oid *id;
 		id = git_reference_target(ref);
 
-		if (geef_oid_bin(&bin, id) < 0)
+		if (git_engine_oid_bin(&bin, id) < 0)
 			return -1;
 	} else {
 		const char *name;
@@ -91,20 +91,20 @@ static int append_to_list(const char *name, void *payload)
 }
 
 ERL_NIF_TERM
-geef_reference_list(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_reference_list(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	int error;
 	size_t i;
 	git_strarray array;
-	geef_repository *repo;
+	git_engine_repository *repo;
 	ERL_NIF_TERM list;
 
-	if (!enif_get_resource(env, argv[0], geef_repository_type, (void **) &repo))
+	if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **) &repo))
 		return enif_make_badarg(env);
 
 	error = git_reference_list(&array, repo->repo);
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
 	list = enif_make_list(env, 0);
 	for (i = 0; i < array.count; i++) {
@@ -124,49 +124,49 @@ geef_reference_list(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 on_error:
 	git_strarray_free(&array);
-	return geef_oom(env);
+	return git_engine_oom(env);
 }
 
 ERL_NIF_TERM
-geef_reference_peel(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_reference_peel(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-	geef_repository *repo;
+	git_engine_repository *repo;
 	git_reference *ref;
 	ErlNifBinary id, bin;
 	git_otype type;
-	geef_object *peeled;
+	git_engine_object *peeled;
 	ERL_NIF_TERM term_peeled;
 	int error;
 
-	if (!enif_get_resource(env, argv[0], geef_repository_type, (void **) &repo))
+	if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **) &repo))
 		return enif_make_badarg(env);
 
 	if (!enif_inspect_binary(env, argv[1], &bin))
 		return enif_make_badarg(env);
 
-	if (!geef_terminate_binary(&bin))
-        return geef_oom(env);
+	if (!git_engine_terminate_binary(&bin))
+        return git_engine_oom(env);
 
-	type = geef_object_atom2type(argv[2]);
+	type = git_engine_object_atom2type(argv[2]);
 	if (type == GIT_OBJ_BAD)
 		return enif_make_badarg(env);
 
 	error = git_reference_lookup(&ref, repo->repo, (char *)bin.data);
 	enif_release_binary(&bin);
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
-	peeled = enif_alloc_resource(geef_object_type, sizeof(geef_object));
+	peeled = enif_alloc_resource(git_engine_object_type, sizeof(git_engine_object));
 	if (!peeled)
-		return geef_oom(env);
+		return git_engine_oom(env);
 
 	error = git_reference_peel(&peeled->obj, ref, type);
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
-	if (geef_oid_bin(&id, git_object_id(peeled->obj)) < 0) {
+	if (git_engine_oid_bin(&id, git_object_id(peeled->obj)) < 0) {
 		enif_release_resource(peeled);
-		return geef_oom(env);
+		return git_engine_oom(env);
 	}
 
 	peeled->repo = repo;
@@ -177,34 +177,34 @@ geef_reference_peel(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 	git_reference_free(ref);
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
-	return enif_make_tuple4(env, atoms.ok, geef_object_type2atom(git_object_type(peeled->obj)),
+	return enif_make_tuple4(env, atoms.ok, git_engine_object_type2atom(git_object_type(peeled->obj)),
 				enif_make_binary(env, &id), term_peeled);
 }
 
 ERL_NIF_TERM
-geef_reference_lookup(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_reference_lookup(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-	geef_repository *repo;
+	git_engine_repository *repo;
 	git_reference *ref = NULL;
 	ERL_NIF_TERM target, type, shorthand;
 	ErlNifBinary bin;
 	int error;
 
-	if (!enif_get_resource(env, argv[0], geef_repository_type, (void **) &repo))
+	if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **) &repo))
 		return enif_make_badarg(env);
 
 	if (!enif_inspect_binary(env, argv[1], &bin))
 		return enif_make_badarg(env);
 
-	if (!geef_terminate_binary(&bin))
+	if (!git_engine_terminate_binary(&bin))
 		goto on_oom;
 
 	error = git_reference_lookup(&ref, repo->repo, (char *)bin.data);
 	enif_release_binary(&bin);
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
 	type = ref_type(ref);
 	if (ref_target(&target, env, ref) < 0)
@@ -219,20 +219,20 @@ on_oom:
 	git_reference_free(ref);
 	enif_release_binary(&bin);
 
-	return geef_oom(env);
+	return git_engine_oom(env);
 }
 
 ERL_NIF_TERM
-geef_reference_iterator(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_reference_iterator(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	ErlNifBinary bin;
 	int globbing, error;
-	geef_repository *repo;
+	git_engine_repository *repo;
 	ERL_NIF_TERM term_iter;
-	geef_ref_iter *res_iter;
+	git_engine_ref_iter *res_iter;
 	git_reference_iterator *iter;
 
-	if (!enif_get_resource(env, argv[0], geef_repository_type, (void **) &repo))
+	if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **) &repo))
 		return enif_make_badarg(env);
 
 
@@ -244,7 +244,7 @@ geef_reference_iterator(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 		return enif_make_badarg(env);
 	}
 
-	if (globbing && !geef_terminate_binary(&bin))
+	if (globbing && !git_engine_terminate_binary(&bin))
 	    return atoms.error;
 
 	if (globbing)
@@ -253,9 +253,9 @@ geef_reference_iterator(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 		error = git_reference_iterator_new(&iter, repo->repo);
 
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
-	res_iter = enif_alloc_resource(geef_ref_iter_type, sizeof(geef_ref_iter));
+	res_iter = enif_alloc_resource(git_engine_ref_iter_type, sizeof(git_engine_ref_iter));
 	res_iter->iter = iter;
 	res_iter->repo = repo;
 	enif_keep_resource(repo);
@@ -266,41 +266,41 @@ geef_reference_iterator(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 }
 
 ERL_NIF_TERM
-geef_reference_next(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_reference_next(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	int error;
 	size_t len;
 	const char *name;
 	git_reference *ref;
 	ErlNifBinary bin;
-	geef_ref_iter *iter;
+	git_engine_ref_iter *iter;
 	ERL_NIF_TERM type, target, shorthand;
 
-	if (!enif_get_resource(env, argv[0], geef_ref_iter_type, (void **) &iter))
+	if (!enif_get_resource(env, argv[0], git_engine_ref_iter_type, (void **) &iter))
 		return enif_make_badarg(env);
 
 	error = git_reference_next(&ref, iter->iter);
 	if (error == GIT_ITEROVER)
 		return enif_make_tuple2(env, atoms.error, atoms.iterover);
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
 	type = ref_type(ref);
 	if (ref_target(&target, env, ref) < 0) {
 		git_reference_free(ref);
-		return geef_oom(env);
+		return git_engine_oom(env);
 	}
 
 	if (ref_shorthand(&shorthand, env, ref) < 0) {
 		git_reference_free(ref);
-		return geef_oom(env);
+		return git_engine_oom(env);
 	}
 
 	name = git_reference_name(ref);
 	len = strlen(name);
 	if (!enif_alloc_binary(len, &bin)) {
 		git_reference_free(ref);
-		return geef_oom(env);
+		return git_engine_oom(env);
 	}
 
 	memcpy(bin.data, name, len);
@@ -308,40 +308,40 @@ geef_reference_next(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	return enif_make_tuple5(env, atoms.ok, enif_make_binary(env, &bin), shorthand, type, target);
 }
 
-void geef_ref_iter_free(ErlNifEnv *env, void *cd)
+void git_engine_ref_iter_free(ErlNifEnv *env, void *cd)
 {
-	geef_ref_iter *ref = (geef_ref_iter *) cd;
+	git_engine_ref_iter *ref = (git_engine_ref_iter *) cd;
 	git_reference_iterator_free(ref->iter);
 	enif_release_resource(ref->repo);
 }
 
 ERL_NIF_TERM
-geef_reference_resolve(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_reference_resolve(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	int error;
 	size_t len;
 	const char *name;
 	ErlNifBinary bin, id;
 	ERL_NIF_TERM shorthand;
-	geef_repository *repo;
+	git_engine_repository *repo;
 	git_reference *ref, *resolved;
 
-	if (!enif_get_resource(env, argv[0], geef_repository_type, (void **) &repo))
+	if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **) &repo))
 		return enif_make_badarg(env);
 
 	if (!enif_inspect_binary(env, argv[1], &bin))
 		return enif_make_badarg(env);
 
-	if (!geef_terminate_binary(&bin))
-		return geef_oom(env);
+	if (!git_engine_terminate_binary(&bin))
+		return git_engine_oom(env);
 
 	error = git_reference_lookup(&ref, repo->repo, (char *) bin.data);
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
 	error = git_reference_resolve(&resolved, ref);
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
 	git_reference_free(ref);
 	name = git_reference_name(resolved);
@@ -352,7 +352,7 @@ geef_reference_resolve(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 	memcpy(bin.data, name, len);
 
-	if (geef_oid_bin(&id, git_reference_target(resolved)) < 0)
+	if (git_engine_oid_bin(&id, git_reference_target(resolved)) < 0)
 		goto on_oom;
 
 
@@ -365,39 +365,39 @@ geef_reference_resolve(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 on_oom:
 	git_reference_free(resolved);
-	return geef_oom(env);
+	return git_engine_oom(env);
 }
 
 ERL_NIF_TERM
-geef_reference_dwim(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_reference_dwim(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	int error;
 	ErlNifBinary bin;
 	ERL_NIF_TERM target, type;
-	geef_repository *repo;
+	git_engine_repository *repo;
 	git_reference *ref;
 	const char *name;
 	size_t len;
 
-	if (!enif_get_resource(env, argv[0], geef_repository_type, (void **) &repo))
+	if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **) &repo))
 		return enif_make_badarg(env);
 
 	if (!enif_inspect_binary(env, argv[1], &bin))
 		return enif_make_badarg(env);
 
-	if (!geef_terminate_binary(&bin))
-		return geef_oom(env);
+	if (!git_engine_terminate_binary(&bin))
+		return git_engine_oom(env);
 
 	error = git_reference_dwim(&ref, repo->repo, (char *)bin.data);
 	if (error < 0) {
 		enif_release_binary(&bin);
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 	}
 
 	type = ref_type(ref);
 	if (ref_target(&target, env, ref) < 0) {
 		git_reference_free(ref);
-		return geef_oom(env);
+		return git_engine_oom(env);
 	}
 
 	name = git_reference_name(ref);
@@ -413,21 +413,21 @@ geef_reference_dwim(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 }
 
 ERL_NIF_TERM
-geef_reference_glob(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_reference_glob(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	int error;
-	geef_repository *repo;
+	git_engine_repository *repo;
 	ErlNifBinary bin;
 	struct list_data data;
 
-	if (!enif_get_resource(env, argv[0], geef_repository_type, (void **) &repo))
+	if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **) &repo))
 		return enif_make_badarg(env);
 
 	if (!enif_inspect_binary(env, argv[1], &bin))
 		return enif_make_badarg(env);
 
-	if (!geef_terminate_binary(&bin))
-		return geef_oom(env);
+	if (!git_engine_terminate_binary(&bin))
+		return git_engine_oom(env);
 
 	data.env = env;
 	data.list = enif_make_list(env, 0);
@@ -436,48 +436,48 @@ geef_reference_glob(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 	enif_release_binary(&bin);
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
 	return data.list;
 }
 
 ERL_NIF_TERM
-geef_reference_to_id(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_reference_to_id(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	int error;
-	geef_repository *repo;
+	git_engine_repository *repo;
 	ErlNifBinary bin;
 	git_oid id;
 
-	if (!enif_get_resource(env, argv[0], geef_repository_type, (void **) &repo))
+	if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **) &repo))
 		return enif_make_badarg(env);
 
 	if (!enif_inspect_binary(env, argv[1], &bin))
 		return enif_make_badarg(env);
 
-	if (!geef_terminate_binary(&bin))
-		return geef_oom(env);
+	if (!git_engine_terminate_binary(&bin))
+		return git_engine_oom(env);
 
 	error = git_reference_name_to_id(&id, repo->repo, (char *)bin.data);
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
-	if (geef_oid_bin(&bin, &id) < 0)
-		return geef_oom(env);
+	if (git_engine_oid_bin(&bin, &id) < 0)
+		return git_engine_oom(env);
 
 	return enif_make_tuple2(env, atoms.ok, enif_make_binary(env, &bin));
 }
 
 ERL_NIF_TERM
-geef_reference_create(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_reference_create(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-	geef_repository *repo;
+	git_engine_repository *repo;
 	ErlNifBinary name, target;
 	int error, force;
 	git_reference *ref = NULL;
 	const char *pname, *ptarget;
 
-	if (!enif_get_resource(env, argv[0], geef_repository_type, (void **) &repo))
+	if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **) &repo))
 		return enif_make_badarg(env);
 
 	if (!enif_inspect_binary(env, argv[1], &name))
@@ -486,8 +486,8 @@ geef_reference_create(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (!enif_inspect_binary(env, argv[3], &target))
 		return enif_make_badarg(env);
 
-	if (!geef_terminate_binary(&name))
-		return geef_oom(env);
+	if (!git_engine_terminate_binary(&name))
+		return git_engine_oom(env);
 
 	force = enif_is_identical(argv[4], atoms.true);
 
@@ -496,8 +496,8 @@ geef_reference_create(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 		const git_oid *oid = (const git_oid *) target.data;
 		error = git_reference_create(&ref, repo->repo, pname, oid, force, NULL);
 	} else if (enif_is_identical(argv[2], atoms.symbolic)) {
-		if (!geef_terminate_binary(&target))
-			return geef_oom(env);
+		if (!git_engine_terminate_binary(&target))
+			return git_engine_oom(env);
 
 		ptarget = (const char *) target.data;
 		error = git_reference_symbolic_create(&ref, repo->repo, pname, ptarget, force, NULL);
@@ -512,59 +512,59 @@ geef_reference_create(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	enif_release_binary(&name);
 
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
 	return atoms.ok;
 }
 
 ERL_NIF_TERM
-geef_reference_delete(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_reference_delete(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-	geef_repository *repo;
+	git_engine_repository *repo;
 	git_reference *ref = NULL;
 	ErlNifBinary bin;
 	int error;
 
-	if (!enif_get_resource(env, argv[0], geef_repository_type, (void **) &repo))
+	if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **) &repo))
 		return enif_make_badarg(env);
 
 	if (!enif_inspect_binary(env, argv[1], &bin))
 		return enif_make_badarg(env);
 
-	if (!geef_terminate_binary(&bin))
-        return geef_oom(env);
+	if (!git_engine_terminate_binary(&bin))
+        return git_engine_oom(env);
 
 	error = git_reference_lookup(&ref, repo->repo, (char *)bin.data);
 	enif_release_binary(&bin);
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
     error = git_reference_delete(ref);
     git_reference_free(ref);
     if (error < 0)
-        return geef_error_struct(env, error);
+        return git_engine_error_struct(env, error);
 
 	return atoms.ok;
 }
 
 
 ERL_NIF_TERM
-geef_reference_has_log(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_reference_has_log(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-	geef_repository *repo;
+	git_engine_repository *repo;
 	ErlNifBinary name;
 	int error;
 	const char *pname;
 	ERL_NIF_TERM ret;
 
-	if (!enif_get_resource(env, argv[0], geef_repository_type, (void **) &repo))
+	if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **) &repo))
 		return enif_make_badarg(env);
 
 	if (!enif_inspect_binary(env, argv[1], &name))
 		return enif_make_badarg(env);
 
-	if (!geef_terminate_binary(&name))
-		return geef_oom(env);
+	if (!git_engine_terminate_binary(&name))
+		return git_engine_oom(env);
 
 	pname = (char *) name.data;
 	error = git_reference_has_log(repo->repo, pname);
@@ -572,7 +572,7 @@ geef_reference_has_log(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	enif_release_binary(&name);
 
 	if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
 	ret = error ? atoms.true : atoms.false;
 

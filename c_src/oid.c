@@ -1,10 +1,10 @@
 #include <git2.h>
 #include <string.h>
 
-#include "geef.h"
+#include "ex_git_engine.h"
 #include "oid.h"
 
-int geef_oid_bin(ErlNifBinary *bin, const git_oid *id)
+int git_engine_oid_bin(ErlNifBinary *bin, const git_oid *id)
 {
 	if (!enif_alloc_binary(GIT_OID_RAWSZ, bin))
 		return -1;
@@ -14,7 +14,7 @@ int geef_oid_bin(ErlNifBinary *bin, const git_oid *id)
 }
 
 ERL_NIF_TERM
-geef_oid_fmt(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_oid_fmt(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	ErlNifBinary bin, bin_out;
 	git_oid id;
@@ -26,7 +26,7 @@ geef_oid_fmt(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 		return enif_make_badarg(env);
 
 	if (!enif_alloc_binary(GIT_OID_HEXSZ, &bin_out))
-		return geef_oom(env);
+		return git_engine_oom(env);
 
 	git_oid_fromraw(&id, bin.data);
 	git_oid_fmt((char *)bin_out.data, &id);
@@ -35,7 +35,7 @@ geef_oid_fmt(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 }
 
 ERL_NIF_TERM
-geef_oid_parse(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_oid_parse(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	ErlNifBinary bin, bin_out;
 	git_oid id;
@@ -45,8 +45,8 @@ geef_oid_parse(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 	git_oid_fromstrn(&id, (const char *)bin.data, bin.size);
 
-	if (geef_oid_bin(&bin_out, &id) < 0)
-		return geef_oom(env);
+	if (git_engine_oid_bin(&bin_out, &id) < 0)
+		return git_engine_oom(env);
 
 	return enif_make_binary(env, &bin_out);
 }

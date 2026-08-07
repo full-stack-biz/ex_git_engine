@@ -1,12 +1,12 @@
-defmodule GitRekt.Packfile do
+defmodule ExGitEngine.Packfile do
   @moduledoc """
   Conveniences for reading and writting Git pack files.
   """
 
   import Bitwise
 
-  alias GitRekt.Config
-  alias GitRekt.Git
+  alias ExGitEngine.Config
+  alias ExGitEngine.Git
 
   @type obj :: {Git.obj_type(), binary}
   @type obj_iter :: {non_neg_integer, non_neg_integer, binary}

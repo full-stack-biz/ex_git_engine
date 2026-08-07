@@ -1,10 +1,10 @@
-defprotocol GitRekt.GitRepo do
+defprotocol ExGitEngine.GitRepo do
   @moduledoc """
   Protocol for implementing access to Git repositories.
   """
 
-  alias GitRekt.GitAgent
-  alias GitRekt.WireProtocol.ReceivePack
+  alias ExGitEngine.GitAgent
+  alias ExGitEngine.WireProtocol.ReceivePack
 
   @type t :: term
 
@@ -35,9 +35,9 @@ defprotocol GitRekt.GitRepo do
   def push(repo, cmds)
 end
 
-defimpl GitRekt.GitRepo, for: Any do
+defimpl ExGitEngine.GitRepo, for: Any do
   def get_agent(repo),
-    do: {:error, "Protocol GitRekt.GitRepo not implemented for #{inspect(repo)}"}
+    do: {:error, "Protocol ExGitEngine.GitRepo not implemented for #{inspect(repo)}"}
 
   def pre_push(_repo, _cmds), do: :ok
   def push(repo, _cmds), do: {:ok, repo}

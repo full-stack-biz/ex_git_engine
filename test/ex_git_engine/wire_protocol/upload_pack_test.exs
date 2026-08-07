@@ -1,7 +1,7 @@
-defmodule GitRekt.WireProtocol.UploadPackTest do
+defmodule ExGitEngine.WireProtocol.UploadPackTest do
   use ExUnit.Case
 
-  alias GitRekt.WireProtocol.UploadPack
+  alias ExGitEngine.WireProtocol.UploadPack
 
   # Test double for disco_transition_state tests
   defmodule TestAgent do
@@ -88,18 +88,18 @@ defmodule GitRekt.WireProtocol.UploadPackTest do
 
   describe "side-band advertisement" do
     test "side-band is in base server capabilities for git-upload-pack" do
-      caps = GitRekt.WireProtocol.server_capabilities("git-upload-pack")
+      caps = ExGitEngine.WireProtocol.server_capabilities("git-upload-pack")
       assert "side-band" in caps
     end
 
     test "side-band-64k is in base server capabilities for git-upload-pack" do
-      caps = GitRekt.WireProtocol.server_capabilities("git-upload-pack")
+      caps = ExGitEngine.WireProtocol.server_capabilities("git-upload-pack")
       assert "side-band-64k" in caps
     end
 
     test "client sending side-band-64k is not rejected as unknown" do
-      advertised = GitRekt.WireProtocol.server_capabilities("git-upload-pack")
-      unknown = GitRekt.WireProtocol.validate_capabilities(["side-band-64k"], advertised)
+      advertised = ExGitEngine.WireProtocol.server_capabilities("git-upload-pack")
+      unknown = ExGitEngine.WireProtocol.validate_capabilities(["side-band-64k"], advertised)
       assert unknown == []
     end
   end
@@ -107,7 +107,7 @@ defmodule GitRekt.WireProtocol.UploadPackTest do
   describe "pack sideband framing" do
     test "pkt_line {:sideband_pack, ch, data} frames without newline" do
       data = "hello"
-      encoded = GitRekt.WireProtocol.pkt_line({:sideband_pack, 1, data})
+      encoded = ExGitEngine.WireProtocol.pkt_line({:sideband_pack, 1, data})
 
       # size = byte_size("hello") + 5 = 10 = 0x000a
       assert <<size::binary-size(4), channel::binary-size(1), payload::binary>> = encoded
@@ -118,7 +118,7 @@ defmodule GitRekt.WireProtocol.UploadPackTest do
 
     test "pkt_line {:sideband_pack, ch, data} does not append newline" do
       data = "binary\x00data"
-      encoded = GitRekt.WireProtocol.pkt_line({:sideband_pack, 1, data})
+      encoded = ExGitEngine.WireProtocol.pkt_line({:sideband_pack, 1, data})
       assert String.ends_with?(encoded, data)
       refute String.ends_with?(encoded, "\n")
     end
@@ -158,13 +158,13 @@ defmodule GitRekt.WireProtocol.UploadPackTest do
 
   describe "server capability advertisement" do
     test "ofs-delta is in base server capabilities for git-upload-pack" do
-      caps = GitRekt.WireProtocol.server_capabilities("git-upload-pack")
+      caps = ExGitEngine.WireProtocol.server_capabilities("git-upload-pack")
       assert "ofs-delta" in caps
     end
 
     test "client sending ofs-delta is not rejected as unknown" do
-      advertised = GitRekt.WireProtocol.server_capabilities("git-upload-pack")
-      unknown = GitRekt.WireProtocol.validate_capabilities(["ofs-delta"], advertised)
+      advertised = ExGitEngine.WireProtocol.server_capabilities("git-upload-pack")
+      unknown = ExGitEngine.WireProtocol.validate_capabilities(["ofs-delta"], advertised)
       assert unknown == []
     end
 
@@ -173,12 +173,12 @@ defmodule GitRekt.WireProtocol.UploadPackTest do
       #   if (args->stateless_rpc) no_done = 1;
       # SSH clients ignore it even when advertised, but advertising it on SSH
       # is misleading. It belongs only in HTTP's transport-level extras.
-      caps = GitRekt.WireProtocol.server_capabilities("git-upload-pack")
+      caps = ExGitEngine.WireProtocol.server_capabilities("git-upload-pack")
       refute "no-done" in caps
     end
 
     test "base server capabilities include multi_ack and multi_ack_detailed" do
-      caps = GitRekt.WireProtocol.server_capabilities("git-upload-pack")
+      caps = ExGitEngine.WireProtocol.server_capabilities("git-upload-pack")
       assert "multi_ack" in caps
       assert "multi_ack_detailed" in caps
     end

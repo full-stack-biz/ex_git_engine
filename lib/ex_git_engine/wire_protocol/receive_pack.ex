@@ -1,17 +1,17 @@
-defmodule GitRekt.WireProtocol.ReceivePack do
+defmodule ExGitEngine.WireProtocol.ReceivePack do
   @moduledoc """
   Module implementing the `git-receive-pack` command.
   """
 
-  @behaviour GitRekt.WireProtocol
+  @behaviour ExGitEngine.WireProtocol
 
-  alias GitRekt.Git
-  alias GitRekt.GitAgent
-  alias GitRekt.GitRepo
+  alias ExGitEngine.Git
+  alias ExGitEngine.GitAgent
+  alias ExGitEngine.GitRepo
 
   require Logger
 
-  import GitRekt.WireProtocol, only: [reference_discovery: 2]
+  import ExGitEngine.WireProtocol, only: [reference_discovery: 2]
 
   @service_name "git-receive-pack"
 
@@ -45,7 +45,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
           client_caps: [binary],
           cmds: [cmd],
           repo: GitRepo.t(),
-          writepack: GitRekt.GitWritePack.t(),
+          writepack: ExGitEngine.GitWritePack.t(),
           writepack_progress: Git.odb_writepack_progress()
         }
 
@@ -55,7 +55,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
 
   @impl true
   def next(%__MODULE__{state: :disco} = handle, [:flush | lines]) do
-    advertised = GitRekt.WireProtocol.server_capabilities(@service_name)
+    advertised = ExGitEngine.WireProtocol.server_capabilities(@service_name)
     Logger.debug("RECEIVE_PACK disco->done")
 
     {%{handle | state: :done, advertised_caps: advertised}, lines,
@@ -63,7 +63,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
   end
 
   def next(%__MODULE__{state: :disco} = handle, lines) do
-    advertised = GitRekt.WireProtocol.server_capabilities(@service_name)
+    advertised = ExGitEngine.WireProtocol.server_capabilities(@service_name)
     Logger.debug("RECEIVE_PACK disco->update_req: advertised_caps=#{inspect(advertised)}")
 
     {%{handle | state: :update_req, advertised_caps: advertised}, lines,
@@ -92,7 +92,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
         )
 
         # Validate client capabilities against advertised capabilities per Git protocol spec
-        unknown_caps = GitRekt.WireProtocol.validate_capabilities(caps, advertised_caps)
+        unknown_caps = ExGitEngine.WireProtocol.validate_capabilities(caps, advertised_caps)
 
         if unknown_caps != [] do
           Logger.error("UPDATE_REQ: client sent unknown capabilities: #{inspect(unknown_caps)}")
@@ -269,7 +269,7 @@ defmodule GitRekt.WireProtocol.ReceivePack do
 
   @impl true
   def skip(%__MODULE__{state: :disco} = handle) do
-    advertised = GitRekt.WireProtocol.server_capabilities(@service_name)
+    advertised = ExGitEngine.WireProtocol.server_capabilities(@service_name)
     Logger.debug("SKIP disco->update_req: advertised_caps=#{inspect(advertised)}")
     %{handle | state: :update_req, advertised_caps: advertised}
   end

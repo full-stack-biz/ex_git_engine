@@ -1,7 +1,7 @@
 #include "erl_nif.h"
 #include <git2.h>
 
-ERL_NIF_TERM geef_library_version(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM git_engine_library_version(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	int major, minor, rev;
 

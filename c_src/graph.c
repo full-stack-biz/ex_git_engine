@@ -1,4 +1,4 @@
-#include "geef.h"
+#include "ex_git_engine.h"
 #include "repository.h"
 #include "graph.h"
 #include "oid.h"
@@ -8,15 +8,15 @@
 #include <git2/sys/commit.h>
 
 ERL_NIF_TERM
-geef_graph_ahead_behind(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_graph_ahead_behind(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     int error;
-    geef_repository *repo;
+    git_engine_repository *repo;
     ErlNifBinary bin;
     git_oid local, upstream;
     size_t ahead, behind;
 
-    if (!enif_get_resource(env, argv[0], geef_repository_type, (void **) &repo))
+    if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **) &repo))
         return enif_make_badarg(env);
 
     if (!enif_inspect_binary(env, argv[1], &bin))
@@ -37,7 +37,7 @@ geef_graph_ahead_behind(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
     error = git_graph_ahead_behind(&ahead, &behind, repo->repo, &local, &upstream);
     if (error < 0)
-		return geef_error_struct(env, error);
+		return git_engine_error_struct(env, error);
 
 	return enif_make_tuple3(env, atoms.ok, enif_make_uint64(env, ahead), enif_make_uint64(env, behind));
 }

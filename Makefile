@@ -15,13 +15,13 @@ LDFLAGS += -lgit2
 src = $(wildcard c_src/*.c)
 obj = $(src:.c=.o)
 
-all: priv/geef_nif.so
+all: priv/ex_git_engine_nif.so
 
-priv/geef_nif.so: $(src)
+priv/ex_git_engine_nif.so: $(src)
 	@mkdir -p priv
 	$(CC) $(CFLAGS) -shared -w $(LDFLAGS) -o $@ $^
 
 clean:
-	$(RM) -r $(obj) priv/geef_nif.so
+	$(RM) -r $(obj) priv/ex_git_engine_nif.so
 
 .PHONY: clean

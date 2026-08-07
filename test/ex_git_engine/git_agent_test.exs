@@ -1,7 +1,7 @@
-defmodule GitRekt.GitAgentTest do
+defmodule ExGitEngine.GitAgentTest do
   use ExUnit.Case, async: true
 
-  alias GitRekt.{GitAgent, GitCommit, GitRef, GitTag, GitTree, GitTreeEntry}
+  alias ExGitEngine.{GitAgent, GitCommit, GitRef, GitTag, GitTree, GitTreeEntry}
 
   setup do
     path = Path.join(System.tmp_dir(), "gitrekt-test-#{:erlang.unique_integer()}")

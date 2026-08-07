@@ -35,7 +35,7 @@ The Makefile handles C compilation of the libgit2 wrapper NIF. The `elixir_make`
 ### Core Modules
 
 **`GitRekt.Git`** - Low-level NIF wrapper to libgit2
-- Direct bindings to C functions; compiled as a shared library (`priv/geef_nif.so`)
+- Direct bindings to C functions; compiled as a shared library (`priv/ex_git_engine_nif.so`)
 - Functions for repository operations, object lookups, ref management, walking commit history
 - Returns tuples indicating types (`:commit`, `:blob`, `:tree`, etc.)
 - Example: `Git.repository_open/1`, `Git.revwalk_new/1`, `Git.commit_message/1`

@@ -1,15 +1,15 @@
 #include <git2.h>
 #include <string.h>
 
-#include "geef.h"
+#include "ex_git_engine.h"
 #include "oid.h"
 #include "repository.h"
 #include "blame.h"
 
 ERL_NIF_TERM
-geef_blame_file(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_blame_file(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-	geef_repository *repo;
+	git_engine_repository *repo;
 	ErlNifBinary path_bin;
 	git_blame *blame;
 	git_blame_options opts = GIT_BLAME_OPTIONS_INIT;
@@ -17,7 +17,7 @@ geef_blame_file(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	uint32_t i, count;
 	int error;
 
-	if (!enif_get_resource(env, argv[0], geef_repository_type, (void **) &repo))
+	if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **) &repo))
 		return enif_make_badarg(env);
 
 	if (!enif_inspect_binary(env, argv[1], &path_bin))
@@ -31,21 +31,21 @@ geef_blame_file(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 		git_oid_fromraw(&opts.newest_commit, oid_bin.data);
 	}
 
-	if (!geef_terminate_binary(&path_bin))
-		return geef_oom(env);
+	if (!git_engine_terminate_binary(&path_bin))
+		return git_engine_oom(env);
 
 	error = git_blame_file(&blame, repo->repo, (char *) path_bin.data, &opts);
 	enif_release_binary(&path_bin);
 
 	if (error < 0)
-		return geef_error(env);
+		return git_engine_error(env);
 
 	count = git_blame_get_hunk_count(blame);
 
 	terms = enif_alloc(count * sizeof(ERL_NIF_TERM));
 	if (!terms) {
 		git_blame_free(blame);
-		return geef_oom(env);
+		return git_engine_oom(env);
 	}
 
 	for (i = 0; i < count; i++) {
@@ -54,21 +54,21 @@ geef_blame_file(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 		const char *name, *email;
 		git_time_t when;
 
-		if (geef_oid_bin(&oid_bin, &hunk->final_commit_id) < 0) {
+		if (git_engine_oid_bin(&oid_bin, &hunk->final_commit_id) < 0) {
 			enif_free(terms);
 			git_blame_free(blame);
-			return geef_oom(env);
+			return git_engine_oom(env);
 		}
 
 		name  = (hunk->final_signature && hunk->final_signature->name)  ? hunk->final_signature->name  : "";
 		email = (hunk->final_signature && hunk->final_signature->email) ? hunk->final_signature->email : "";
 		when  = (hunk->final_signature) ? hunk->final_signature->when.time : 0;
 
-		if (geef_string_to_bin(&name_bin, name) < 0 ||
-		    geef_string_to_bin(&email_bin, email) < 0) {
+		if (git_engine_string_to_bin(&name_bin, name) < 0 ||
+		    git_engine_string_to_bin(&email_bin, email) < 0) {
 			enif_free(terms);
 			git_blame_free(blame);
-			return geef_oom(env);
+			return git_engine_oom(env);
 		}
 
 		terms[i] = enif_make_tuple6(env,

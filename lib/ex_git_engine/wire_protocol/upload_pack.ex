@@ -1,16 +1,16 @@
-defmodule GitRekt.WireProtocol.UploadPack do
+defmodule ExGitEngine.WireProtocol.UploadPack do
   @moduledoc """
   Module implementing the `git-upload-pack` command.
   """
 
-  @behaviour GitRekt.WireProtocol
+  @behaviour ExGitEngine.WireProtocol
 
-  alias GitRekt.Git
-  alias GitRekt.GitAgent
+  alias ExGitEngine.Git
+  alias ExGitEngine.GitAgent
 
   require Logger
 
-  import GitRekt.WireProtocol, only: [reference_discovery: 3]
+  import ExGitEngine.WireProtocol, only: [reference_discovery: 3]
 
   @service_name "git-upload-pack"
 
@@ -65,7 +65,7 @@ defmodule GitRekt.WireProtocol.UploadPack do
     )
 
     # Validate client capabilities against advertised capabilities per Git protocol spec
-    unknown_caps = GitRekt.WireProtocol.validate_capabilities(caps, advertised_caps)
+    unknown_caps = ExGitEngine.WireProtocol.validate_capabilities(caps, advertised_caps)
 
     if unknown_caps != [] do
       Logger.error("UPLOAD_REQ: client sent unknown capabilities: #{inspect(unknown_caps)}")
@@ -167,7 +167,7 @@ defmodule GitRekt.WireProtocol.UploadPack do
   end
 
   defp build_advertised_caps(no_done) do
-    base = GitRekt.WireProtocol.server_capabilities(@service_name)
+    base = ExGitEngine.WireProtocol.server_capabilities(@service_name)
     if no_done, do: base ++ ["no-done"], else: base
   end
 

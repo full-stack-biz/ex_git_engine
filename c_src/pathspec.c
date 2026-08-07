@@ -2,18 +2,18 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "geef.h"
+#include "ex_git_engine.h"
 #include "pathspec.h"
 
 ERL_NIF_TERM
-geef_pathspec_match_tree(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+git_engine_pathspec_match_tree(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-	geef_object *obj;
+	git_engine_object *obj;
 	git_strarray array;
 	git_pathspec *pathspec;
 	int match;
 
-	if (!enif_get_resource(env, argv[0], geef_object_type, (void **) &obj))
+	if (!enif_get_resource(env, argv[0], git_engine_object_type, (void **) &obj))
 		return enif_make_badarg(env);
 
 	array = git_strarray_from_list(env, argv[1]);
