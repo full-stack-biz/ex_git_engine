@@ -21,7 +21,7 @@ Sources:
 - [SSH Debugging](#ssh-debugging)
 - [Common SSH Issues](#common-ssh-issues)
 - [Pack Fragmentation Over SSH](#pack-fragmentation-over-ssh)
-- [GitRekt SSH Implementation](#gitrekt-ssh-implementation)
+- [ExGitEngine SSH Implementation](#ex_git_engine-ssh-implementation)
 
 ---
 
@@ -471,7 +471,7 @@ The output (report-status, sideband messages) from `handle_push_cmds` is sent to
 
 ---
 
-## GitRekt SSH Implementation
+## ExGitEngine SSH Implementation
 
 When gitRekt receives an SSH connection, the remote side executes:
 

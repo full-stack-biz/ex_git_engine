@@ -1,4 +1,4 @@
-## GitRekt
+## ExGitEngine
 
 This is a simple extraction of the libgit2 wrapper library from https://github.com/redrabbit/git.limo, with some fixed headers and updated Makefile for modern MacOS and Linux.
 
@@ -13,7 +13,7 @@ brew install libgit2
 Then put this in your mixfile:
 
 ```elixir
-  {:gitrekt, git: "https://github.com/jtippett/gitrekt.git", branch: "main"}
+  {:ex_git_engine, git: "https://github.com/jtippett/ex_git_engine.git", branch: "main"}
 ```
      
 Then run `mix deps.get` and you're good to go.

@@ -1,6 +1,6 @@
 # libgit2 API Reference
 
-libgit2 is a portable C library that implements Git functionality. GitRekt wraps libgit2 via Erlang NIFs to provide Git access from Elixir.
+libgit2 is a portable C library that implements Git functionality. ExGitEngine wraps libgit2 via Erlang NIFs to provide Git access from Elixir.
 
 Sources:
 - https://libgit2.org/
@@ -22,7 +22,7 @@ Sources:
 - [Object ID (OID) Handling](#object-id-oid-handling)
 - [Error Handling](#error-handling)
 - [Thread Safety](#thread-safety)
-- [NIF Wrapper Implications (GitRekt)](#nif-wrapper-implications-gitrekt)
+- [NIF Wrapper Implications (ExGitEngine)](#nif-wrapper-implications-ex_git_engine)
 - [Common libgit2 Patterns](#common-libgit2-patterns)
 - [Common Pitfalls](#common-pitfalls)
 - [Version-Specific Considerations](#version-specific-considerations)
@@ -539,7 +539,7 @@ Git repository objects are **not thread-safe**. Multiple threads must not:
 
 - Create separate repository handles per thread
 - Use locking/mutex to serialize access
-- Use GitAgent (in GitRekt) for safe concurrent access via message passing
+- Use GitAgent (in ExGitEngine) for safe concurrent access via message passing
 
 ### Object References
 
@@ -550,7 +550,7 @@ Once created, Git object references (commits, trees, blobs) can be:
 
 ---
 
-## NIF Wrapper Implications (GitRekt)
+## NIF Wrapper Implications (ExGitEngine)
 
 ### Memory in NIFs
 
@@ -560,7 +560,7 @@ NIFs run in the Erlang VM, not as separate processes. Careful memory management 
 - Memory leaks in NIF code affect the entire VM
 - Crashes in C code (segfaults, etc.) crash the entire VM
 
-**GitRekt's `Git` module handles this** by:
+**ExGitEngine's `Git` module handles this** by:
 - Wrapping all libgit2 calls in C code
 - Freeing objects before returning to Erlang
 - Returning error tuples instead of letting C errors propagate
@@ -573,7 +573,7 @@ NIFs run in the Erlang VM, not as separate processes. Careful memory management 
 
 ### Serialization via GitAgent
 
-Since libgit2 repository objects aren't thread-safe, GitRekt uses:
+Since libgit2 repository objects aren't thread-safe, ExGitEngine uses:
 
 - `GitAgent` GenServer to serialize all repository access
 - One repository handle per agent
@@ -660,7 +660,7 @@ if (obj) git_object_free(obj);
 
 ### libgit2 1.0+
 
-Modern stable version. Recommended for GitRekt.
+Modern stable version. Recommended for ExGitEngine.
 
 Key features:
 - Stable API
@@ -676,7 +676,7 @@ Differences:
 - Different error handling in edge cases
 - No SHA-256 support
 
-GitRekt should target 1.0+ unless legacy support required.
+ExGitEngine should target 1.0+ unless legacy support required.
 
 ---
 

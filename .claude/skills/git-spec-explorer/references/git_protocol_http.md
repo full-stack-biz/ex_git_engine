@@ -20,7 +20,7 @@ Sources:
 - [HTTP Redirects](#http-redirects)
 - [Protocol Version Negotiation](#protocol-version-negotiation)
 - [HTTP Pack Body Delivery and EOF Signalling](#http-pack-body-delivery-and-eof-signalling)
-- [GitRekt HTTP Transport Implementation](#gitrekt-http-transport-implementation)
+- [ExGitEngine HTTP Transport Implementation](#ex_git_engine-http-transport-implementation)
 
 ---
 
@@ -404,9 +404,9 @@ end
 
 ---
 
-## GitRekt HTTP Transport Implementation
+## ExGitEngine HTTP Transport Implementation
 
-When GitRekt receives an HTTP request:
+When ExGitEngine receives an HTTP request:
 
 1. **Reference discovery** (GET /info/refs?service=git-receive-pack)
    - Parse service parameter

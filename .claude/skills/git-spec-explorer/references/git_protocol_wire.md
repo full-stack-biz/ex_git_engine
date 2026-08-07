@@ -17,7 +17,7 @@ Sources:
 - [Fetch Negotiation Phase (upload-pack)](#fetch-negotiation-phase-upload-pack)
 - [Common Protocol Rules (All Operations)](#common-protocol-rules-all-operations)
 - [Full Push Example (Wire Protocol Only)](#full-push-example-wire-protocol-only)
-- [GitRekt Implementation Notes](#gitrekt-implementation-notes)
+- [ExGitEngine Implementation Notes](#ex_git_engine-implementation-notes)
 
 ---
 
@@ -332,7 +332,7 @@ S: 0000
 
 ---
 
-## GitRekt Implementation Notes
+## ExGitEngine Implementation Notes
 
 ### Capabilities Fields in WireProtocol.ReceivePack
 
@@ -348,7 +348,7 @@ S: 0000
   - Contains ONLY server capabilities, NOT client capabilities
   - Used for validation: ensures client didn't request unknown capabilities
   - CRITICAL: Should NEVER be concatenated with `caps` (client capabilities)
-  - Format: list of strings like ["agent=gitrekt/0.3.9", "report-status", "delete-refs", ...]
+  - Format: list of strings like ["agent=ex_git_engine/0.3.9", "report-status", "delete-refs", ...]
 
 ### Protocol Rule: "Requests" Means Client Sends It
 
@@ -394,7 +394,7 @@ Some capabilities have parameters (using `=` syntax) where negotiation rules var
 **1. Informational/Negotiable — Client Has Freedom**
 
 - **`agent=X`** (both receive-pack and upload-pack)
-  - Server advertises: `agent=gitrekt/1.0.0`
+  - Server advertises: `agent=ex_git_engine/1.0.0`
   - Client may respond: `agent=git/2.54.0-Darwin` (DIFFERENT value allowed)
   - Spec: "The client may optionally return its own agent string by responding with an `agent=Y` capability (but it MUST NOT do so if the server did not mention the agent capability)."
   - Purpose: Purely informational for statistics/debugging; MUST NOT programmatically assume features

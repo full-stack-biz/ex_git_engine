@@ -270,7 +270,7 @@ defmodule ExGitEngine.WireProtocol.ReceivePackTest do
     end
 
     test "validate_capabilities: allows agent capability with different value" do
-      advertised_caps = ["report-status", "agent=gitrekt/1.0.0"]
+      advertised_caps = ["report-status", "agent=ex_git_engine/1.0.0"]
       client_caps = ["report-status", "agent=git/2.54.0-Darwin"]
       unknown = ExGitEngine.WireProtocol.validate_capabilities(client_caps, advertised_caps)
 
@@ -278,7 +278,7 @@ defmodule ExGitEngine.WireProtocol.ReceivePackTest do
     end
 
     test "validate_capabilities: allows any agent value from client" do
-      advertised_caps = ["agent=gitrekt/1.0.0"]
+      advertised_caps = ["agent=ex_git_engine/1.0.0"]
       # Client can send any agent value, not just the one advertised
       client_caps = ["agent=custom/5.0.0-beta"]
       unknown = ExGitEngine.WireProtocol.validate_capabilities(client_caps, advertised_caps)
@@ -327,7 +327,7 @@ defmodule ExGitEngine.WireProtocol.ReceivePackTest do
     end
 
     test "validate_capabilities: mixed valid and invalid capabilities" do
-      advertised_caps = ["report-status", "agent=gitrekt/1.0.0", "delete-refs"]
+      advertised_caps = ["report-status", "agent=ex_git_engine/1.0.0", "delete-refs"]
       client_caps = ["report-status", "agent=git/2.0.0", "delete-refs", "unknown-cap"]
       unknown = ExGitEngine.WireProtocol.validate_capabilities(client_caps, advertised_caps)
 
@@ -365,7 +365,7 @@ defmodule ExGitEngine.WireProtocol.ReceivePackTest do
     test "validate_capabilities: protocol compliance example (git push scenario)" do
       # Realistic scenario: server advertises capabilities, client responds with agent
       advertised_caps = [
-        "agent=gitrekt/0.1.0",
+        "agent=ex_git_engine/0.1.0",
         "report-status",
         "delete-refs",
         "ofs-delta",
@@ -779,7 +779,7 @@ defmodule ExGitEngine.WireProtocol.ReceivePackTest do
   describe "full protocol chain (handle_push_cmds)" do
     setup do
       make_repo = fn ->
-        path = Path.join(System.tmp_dir(), "gitrekt-chain-#{:erlang.unique_integer()}")
+        path = Path.join(System.tmp_dir(), "ex_git_engine-chain-#{:erlang.unique_integer()}")
         File.mkdir_p!(path)
         cmd = fn args -> System.cmd("git", ["-C", path | args], stderr_to_stdout: true) end
         cmd.(["init", "--initial-branch=main"])
@@ -793,7 +793,7 @@ defmodule ExGitEngine.WireProtocol.ReceivePackTest do
       end
 
       # Server: bare repo with initial commit A
-      server_path = Path.join(System.tmp_dir(), "gitrekt-chain-srv-#{:erlang.unique_integer()}")
+      server_path = Path.join(System.tmp_dir(), "ex_git_engine-chain-srv-#{:erlang.unique_integer()}")
       File.mkdir_p!(server_path)
 
       System.cmd("git", ["-C", server_path, "init", "--bare", "--initial-branch=main"],
@@ -879,7 +879,7 @@ defmodule ExGitEngine.WireProtocol.ReceivePackTest do
   describe "validate_cmd/2" do
     setup do
       make_repo = fn ->
-        path = Path.join(System.tmp_dir(), "gitrekt-rv-#{:erlang.unique_integer()}")
+        path = Path.join(System.tmp_dir(), "ex_git_engine-rv-#{:erlang.unique_integer()}")
         File.mkdir_p!(path)
         cmd = fn args -> System.cmd("git", ["-C", path | args], stderr_to_stdout: true) end
         cmd.(["init"])

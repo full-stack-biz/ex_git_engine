@@ -27,7 +27,7 @@ Official spec: https://git-scm.com/docs/gitprotocol-v2
 - [SSH Transport in v2](#ssh-transport-in-v2)
 - [bundle-uri Command](#bundle-uri-command)
 - [promisor-remote Capability](#promisor-remotepr-info)
-- [Key Implementation Rules for gitrekt](#key-implementation-rules-for-gitrekt)
+- [Key Implementation Rules for ex_git_engine](#key-implementation-rules-for-ex_git_engine)
 
 ---
 
@@ -366,7 +366,7 @@ Server advertises: `agent=X` where X is server version
 Client may respond: `agent=Y` (ONLY if server advertised `agent`)
 
 **Format**: `agent=package/version-os`
-- Examples: `agent=git/1.8.3.1-Linux`, `agent=gitrekt/0.3.9-Darwin`
+- Examples: `agent=git/1.8.3.1-Linux`, `agent=ex_git_engine/0.3.9-Darwin`
 - Characters: any printable ASCII except space (byte range 33-126)
 - OS retrieved from `uname(2)` sysname field
 
@@ -638,7 +638,7 @@ Server advertises promisor remotes it already uses to borrow objects from.
 
 ---
 
-## Key Implementation Rules for gitrekt
+## Key Implementation Rules for ex_git_engine
 
 1. **Statelessness**: Each command is independent. Don't carry state between commands.
 2. **Capability Validation**: Client capabilities MUST be subset of advertised.

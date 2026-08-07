@@ -330,7 +330,7 @@ defmodule ExGitEngine.WireProtocol do
   end
 
   @doc """
-  Returns the agent capability string for gitrekt.
+  Returns the agent capability string for ex_git_engine.
   """
   def server_agent_capability, do: "agent=ex_git_engine/#{Application.spec(:ex_git_engine, :vsn)}"
 

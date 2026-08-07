@@ -5,7 +5,7 @@ description: >-
   Use when implementing Git wire protocol features, validating capability negotiation,
   or debugging push/fetch protocol issues. Extracts authoritative specs from Git man pages
   (man gitprotocol-v2, man gitprotocol-pack, etc.), updates protocol reference files,
-  and references gitrekt's protocol knowledge base.
+  and references ex_git_engine's protocol knowledge base.
 allowed-tools:
   - Bash
   - Skill
@@ -15,9 +15,9 @@ allowed-tools:
 
 # Git Spec Explorer
 
-**Purpose:** Systematically explore Git specifications and collect implementation details to ensure protocol conformity in gitrekt.
+**Purpose:** Systematically explore Git specifications and collect implementation details to ensure protocol conformity in ex_git_engine.
 
-**Core Principle:** GitRekt is a thin Elixir wrapper around libgit2. Maximize use of libgit2's C API via NIFs; only build Elixir code when libgit2 doesn't provide the functionality.
+**Core Principle:** ExGitEngine is a thin Elixir wrapper around libgit2. Maximize use of libgit2's C API via NIFs; only build Elixir code when libgit2 doesn't provide the functionality.
 
 ## Quick Start
 
@@ -30,11 +30,11 @@ Examples:
 - /git-spec-explorer push protocol receive-pack flow
 ```
 
-This collects protocol details from Git's official man pages (`man gitprotocol-v2`, `man gitprotocol-pack`, etc.), references gitrekt's protocol knowledge base, and updates documentation with findings. Returns authoritative specifications with implementation guidance.
+This collects protocol details from Git's official man pages (`man gitprotocol-v2`, `man gitprotocol-pack`, etc.), references ex_git_engine's protocol knowledge base, and updates documentation with findings. Returns authoritative specifications with implementation guidance.
 
 ## NIF-First Design Principle
 
-**GitRekt Architecture:** libgit2 (C) → NIF bindings (`Git` module) → Elixir wrappers (`GitAgent`, `GitRepo`)
+**ExGitEngine Architecture:** libgit2 (C) → NIF bindings (`Git` module) → Elixir wrappers (`GitAgent`, `GitRepo`)
 
 **When implementing features:**
 1. **Check libgit2 first** — Does libgit2 already provide this? Use it via NIF.
@@ -107,15 +107,15 @@ This collects protocol details from Git's official man pages (`man gitprotocol-v
 1. **Identify protocol phase** → Which part of push/fetch/upload flow?
 2. **Find spec section** → Search official docs for that phase
 3. **Extract rules** → Client MUST/MUST NOT, Server MUST/MUST NOT from RFC language
-4. **Validate against gitrekt** → Check if `references/git_protocol.md` has this detail
-5. **Document gaps** → Note any specs gitrekt hasn't documented yet
+4. **Validate against ex_git_engine** → Check if `references/git_protocol.md` has this detail
+5. **Document gaps** → Note any specs ex_git_engine hasn't documented yet
 
 **Template for findings:**
 ```
 Protocol Aspect: [capability | response format | command validation | etc]
 Spec Reference: https://git-scm.com/docs/gitprotocol-[pack|http|capabilities]
 Rule: [exact requirement from spec]
-Current Implementation: [gitrekt file/function handling this]
+Current Implementation: [ex_git_engine file/function handling this]
 Gaps: [anything missing or unclear]
 ```
 
@@ -150,7 +150,7 @@ The references are organized by layer to eliminate duplication:
 - **git_protocol_wire.md** — Shared by both HTTP and SSH
   - Pkt-line format, capabilities, phases (discovery, commands, response)
   - Push/fetch flows, packfile handling
-  - GitRekt implementation specifics (`caps` vs `advertised_caps`)
+  - ExGitEngine implementation specifics (`caps` vs `advertised_caps`)
 
 **Transport Layers**:
 - **git_protocol_http.md** — HTTP smart protocol only
@@ -172,7 +172,7 @@ The references are organized by layer to eliminate duplication:
   - libgit2 API: repositories, objects, references, trees, commits, blobs
   - Memory management and object lifecycle
   - Thread safety and serialization requirements
-  - NIF wrapper implications for GitRekt
+  - NIF wrapper implications for ExGitEngine
   - Common patterns and pitfalls
 
 **Research Strategy** (NIF-First):
@@ -195,7 +195,7 @@ When implementing features, verify:
 **Spec Alignment:**
 - [ ] Source is official spec (git-scm.com or Git source repo)
 - [ ] Rule is exact quote or direct paraphrase from spec
-- [ ] Implementation location identified in gitrekt code
+- [ ] Implementation location identified in ex_git_engine code
 - [ ] Protocol phase clearly identified (discovery, command, response, etc)
 - [ ] Identified as universal (wire) or transport-specific (HTTP/SSH)
 
@@ -263,7 +263,7 @@ These should **only** be done in Elixir, not in C:
 | Task | Why Elixir | Don't Use NIF |
 |------|-----------|--------------|
 | Protocol framing (pkt-line) | Format encoding, not Git operation | libgit2 doesn't do protocol, just objects |
-| Capability negotiation | Business logic specific to GitRekt | libgit2 doesn't negotiate capabilities |
+| Capability negotiation | Business logic specific to ExGitEngine | libgit2 doesn't negotiate capabilities |
 | Push/fetch hooks | Repository-specific validation | Custom application logic, not Git core |
 | Concurrent access serialization | Erlang GenServer patterns | libgit2 isn't thread-safe; GitAgent serializes |
 | Caching strategy | Application-level caching decisions | libgit2 has internal cache; GitAgent adds Elixir caching |
@@ -307,9 +307,9 @@ These should **only** be done in Elixir, not in C:
 - `libgit2 error handling` → Reference: libgit2_api.md — Return codes, error details, common pitfalls
 
 **Implementation**:
-- `gitrekt capability validation` → Reference: git_protocol_wire.md — caps vs advertised_caps, validation rules
-- `gitrekt report-status decision` → Reference: git_protocol_wire.md — Check caps field, not advertised_caps
-- `gitrekt http transport` → Reference: git_protocol_http.md — Request/response body handling
-- `gitrekt ssh transport` → Reference: git_protocol_ssh.md — Channel stdin/stdout handling
-- `gitrekt nif wrapper` → Reference: libgit2_api.md — Memory management in NIFs, serialization, safety rules
-- `gitrekt git module` → Reference: libgit2_api.md — Elixir bindings to libgit2 C functions
+- `ex_git_engine capability validation` → Reference: git_protocol_wire.md — caps vs advertised_caps, validation rules
+- `ex_git_engine report-status decision` → Reference: git_protocol_wire.md — Check caps field, not advertised_caps
+- `ex_git_engine http transport` → Reference: git_protocol_http.md — Request/response body handling
+- `ex_git_engine ssh transport` → Reference: git_protocol_ssh.md — Channel stdin/stdout handling
+- `ex_git_engine nif wrapper` → Reference: libgit2_api.md — Memory management in NIFs, serialization, safety rules
+- `ex_git_engine git module` → Reference: libgit2_api.md — Elixir bindings to libgit2 C functions

@@ -4,7 +4,7 @@ defmodule ExGitEngine.GitAgentTest do
   alias ExGitEngine.{GitAgent, GitCommit, GitRef, GitTag, GitTree, GitTreeEntry}
 
   setup do
-    path = Path.join(System.tmp_dir(), "gitrekt-test-#{:erlang.unique_integer()}")
+    path = Path.join(System.tmp_dir(), "ex_git_engine-test-#{:erlang.unique_integer()}")
     File.mkdir_p!(path)
 
     cmd = fn args -> System.cmd("git", ["-C", path | args], stderr_to_stdout: true) end
@@ -49,7 +49,7 @@ defmodule ExGitEngine.GitAgentTest do
     end
 
     test "returns true for freshly initialized repo" do
-      path = Path.join(System.tmp_dir(), "gitrekt-empty-#{:erlang.unique_integer()}")
+      path = Path.join(System.tmp_dir(), "ex_git_engine-empty-#{:erlang.unique_integer()}")
       File.mkdir_p!(path)
       System.cmd("git", ["-C", path, "init"], stderr_to_stdout: true)
       {:ok, agent} = GitAgent.start_link(path)
@@ -117,7 +117,7 @@ defmodule ExGitEngine.GitAgentTest do
     end
 
     test "returns empty enumerable when no tags exist" do
-      path = Path.join(System.tmp_dir(), "gitrekt-notags-#{:erlang.unique_integer()}")
+      path = Path.join(System.tmp_dir(), "ex_git_engine-notags-#{:erlang.unique_integer()}")
       File.mkdir_p!(path)
       System.cmd("git", ["-C", path, "init"], stderr_to_stdout: true)
       System.cmd("git", ["-C", path, "config", "user.email", "t@t.com"], stderr_to_stdout: true)
