@@ -12,6 +12,7 @@ defmodule GitRekt.Mixfile do
       elixir: "~> 1.5",
       compilers: [:elixir_make] ++ Mix.compilers(),
       make_args: ["--quiet"],
+      licenses: ["MIT"],
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       aliases: aliases(),
