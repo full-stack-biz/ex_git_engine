@@ -12,7 +12,8 @@ defmodule ExGitEngine.Mixfile do
       elixir: "~> 1.15",
       compilers: [:elixir_make] ++ Mix.compilers(),
       make_args: ["--quiet"],
-      licenses: ["MIT"],
+      description: "Elixir libgit2 wrapper with GenServer-based concurrent access and Git wire protocol",
+      package: package(),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       aliases: aliases(),
@@ -27,6 +28,14 @@ defmodule ExGitEngine.Mixfile do
   def cli do
     [
       preferred_envs: [ci: :test]
+    ]
+  end
+
+  defp package do
+    [
+      licenses: ["MIT"],
+      links: %{"GitHub" => "https://github.com/full-stack-biz/ex_git_engine"},
+      files: ~w(lib c_src Makefile mix.exs LICENSE readme.md)
     ]
   end
 
