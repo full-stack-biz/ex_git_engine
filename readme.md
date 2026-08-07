@@ -16,7 +16,7 @@ sudo apt-get install libgit2-dev  # Ubuntu/Linux
 ## Installation
 
 ```elixir
-{:ex_git_engine, "~> 0.3"}
+{:ex_git_engine, "~> 0.9"}
 ```
 
 ## Architecture
