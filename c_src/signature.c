@@ -9,7 +9,7 @@ int git_engine_signature_from_erl(git_signature **out, ErlNifEnv *env, ERL_NIF_T
 	const ERL_NIF_TERM *tuple;
 	ErlNifBinary name, email;
 	git_signature *sig;
-	git_time_t gtime;
+	ErlNifSInt64 gtime;
 	int offset, arity;
 
 	memset(&name, 0, sizeof(ErlNifBinary));
@@ -33,7 +33,7 @@ int git_engine_signature_from_erl(git_signature **out, ErlNifEnv *env, ERL_NIF_T
 	if (!git_engine_terminate_binary(&email))
 		goto on_oom;
 
-	if (!enif_get_uint(env, tuple[2], &gtime))
+	if (!enif_get_int64(env, tuple[2], &gtime))
 		goto on_badarg;
 
 	if (!enif_get_int(env, tuple[3], &offset))

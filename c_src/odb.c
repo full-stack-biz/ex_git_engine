@@ -16,7 +16,7 @@ void git_engine_odb_free(ErlNifEnv *env, void *cd)
 void git_engine_odb_writepack_free(ErlNifEnv *env, void *cd)
 {
 	git_engine_odb_writepack *odb_writepack = (git_engine_odb_writepack *)cd;
-	git_odb_free(odb_writepack->odb_writepack);
+	odb_writepack->odb_writepack->free(odb_writepack->odb_writepack);
 }
 
 static int noop_indexer_progress_callback(const git_indexer_progress *progress, void *payload)

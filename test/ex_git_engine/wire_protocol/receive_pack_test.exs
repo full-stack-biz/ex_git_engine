@@ -793,7 +793,9 @@ defmodule ExGitEngine.WireProtocol.ReceivePackTest do
       end
 
       # Server: bare repo with initial commit A
-      server_path = Path.join(System.tmp_dir(), "ex_git_engine-chain-srv-#{:erlang.unique_integer()}")
+      server_path =
+        Path.join(System.tmp_dir(), "ex_git_engine-chain-srv-#{:erlang.unique_integer()}")
+
       File.mkdir_p!(server_path)
 
       System.cmd("git", ["-C", server_path, "init", "--bare", "--initial-branch=main"],

@@ -4,7 +4,7 @@ defmodule ExGitEngine.Mixfile do
   def project do
     [
       app: :ex_git_engine,
-      version: "0.9.0",
+      version: "0.9.1",
       build_path: "_build",
       config_path: "config/config.exs",
       deps_path: "deps",
@@ -12,12 +12,13 @@ defmodule ExGitEngine.Mixfile do
       elixir: "~> 1.15",
       compilers: [:elixir_make] ++ Mix.compilers(),
       make_args: ["--quiet"],
-      description: "Elixir libgit2 wrapper with GenServer-based concurrent access and Git wire protocol",
+      description:
+        "Elixir libgit2 wrapper with GenServer-based concurrent access and Git wire protocol",
       package: package(),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       aliases: aliases(),
-      dialyzer: [plt_add_apps: [:ex_unit]]
+      dialyzer: [plt_add_apps: [:ex_unit, :logger, :telemetry, :stream_split]]
     ]
   end
 
