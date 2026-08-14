@@ -4,6 +4,18 @@ defmodule ExGitEngine.WireProtocol.ReceivePackTest do
   alias ExGitEngine.{Git, GitAgent}
   alias ExGitEngine.WireProtocol.ReceivePack
 
+  # Test double for GitRepo protocol
+  defmodule TestRepo do
+    @moduledoc "Configurable GitRepo implementation for unit tests."
+    defstruct [:pre_push_fn]
+  end
+
+  defimpl ExGitEngine.GitRepo, for: TestRepo do
+    def get_agent(_repo), do: {:error, "not implemented"}
+    def pre_push(repo, cmds), do: repo.pre_push_fn.(cmds)
+    def push(repo, _cmds), do: {:ok, repo}
+  end
+
   describe "report_status/1" do
     test "returns tuple protocol elements" do
       handle = %ReceivePack{
@@ -957,6 +969,73 @@ defmodule ExGitEngine.WireProtocol.ReceivePackTest do
       # main is at A; client claims current is B (wrong)
       assert {:error, :stale_ref} =
                ReceivePack.validate_cmd(agent, {:delete, oid_b, "refs/heads/main"})
+    end
+  end
+
+  describe "push_cmds/3 — pre_push inside transaction" do
+    setup do
+      path = Path.join(System.tmp_dir(), "gitrekt-pc-#{:erlang.unique_integer()}")
+      File.mkdir_p!(path)
+      cmd = fn args -> System.cmd("git", ["-C", path | args], stderr_to_stdout: true) end
+      cmd.(["init", "--initial-branch=main"])
+      cmd.(["config", "user.email", "test@example.com"])
+      cmd.(["config", "user.name", "Test"])
+      File.write!(Path.join(path, "file.txt"), "v1\n")
+      cmd.(["add", "."])
+      cmd.(["commit", "-m", "commit A"])
+      {oid_a_str, 0} = cmd.(["rev-parse", "HEAD"])
+      File.write!(Path.join(path, "file.txt"), "v2\n")
+      cmd.(["add", "."])
+      cmd.(["commit", "-m", "commit B"])
+      {oid_b_str, 0} = cmd.(["rev-parse", "HEAD"])
+      System.cmd("git", ["-C", path, "reset", "--hard", "HEAD~1"], stderr_to_stdout: true)
+
+      {:ok, agent} = GitAgent.start_link(path)
+
+      on_exit(fn ->
+        if Process.alive?(agent), do: GenServer.stop(agent)
+        File.rm_rf!(path)
+      end)
+
+      %{
+        agent: agent,
+        oid_a: Git.oid_parse(String.trim(oid_a_str)),
+        oid_b: Git.oid_parse(String.trim(oid_b_str))
+      }
+    end
+
+    test "pre_push error stops push before ref update",
+         %{agent: agent, oid_a: oid_a, oid_b: oid_b} do
+      repo = %TestRepo{pre_push_fn: fn _cmds -> {:error, "branch is protected"} end}
+      cmd = {:update, oid_a, oid_b, "refs/heads/main"}
+
+      assert {:error, "branch is protected"} = ReceivePack.push_cmds(repo, agent, [cmd])
+
+      # ref must remain at oid_a — push was aborted
+      assert {:ok, ref} = GitAgent.reference(agent, "refs/heads/main")
+      assert ref.oid == oid_a
+    end
+
+    test "pre_push ok with valid update commits the ref",
+         %{agent: agent, oid_a: oid_a, oid_b: oid_b} do
+      repo = %TestRepo{pre_push_fn: fn _cmds -> :ok end}
+      cmd = {:update, oid_a, oid_b, "refs/heads/main"}
+
+      assert :ok = ReceivePack.push_cmds(repo, agent, [cmd])
+      assert {:ok, ref} = GitAgent.reference(agent, "refs/heads/main")
+      assert ref.oid == oid_b
+    end
+
+    test "pre_push error is returned even when old_oid is stale",
+         %{agent: agent, oid_a: oid_a, oid_b: oid_b} do
+      # Simulate: another push already moved the ref past oid_b.
+      # Client's cmd has old_oid = oid_a (stale).
+      # pre_push is called first inside the transaction; its error takes priority.
+      wrong_old_oid = oid_b
+      repo = %TestRepo{pre_push_fn: fn _cmds -> {:error, "branch is protected"} end}
+      cmd = {:update, wrong_old_oid, oid_a, "refs/heads/main"}
+
+      assert {:error, "branch is protected"} = ReceivePack.push_cmds(repo, agent, [cmd])
     end
   end
 end
