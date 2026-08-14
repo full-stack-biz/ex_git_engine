@@ -12,5 +12,6 @@ ERL_NIF_TERM git_engine_commit_committer(ErlNifEnv *env, int argc, const ERL_NIF
 ERL_NIF_TERM git_engine_commit_time(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 ERL_NIF_TERM git_engine_commit_raw_header(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 ERL_NIF_TERM git_engine_commit_header(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
+ERL_NIF_TERM git_engine_commit_raw(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 
 #endif

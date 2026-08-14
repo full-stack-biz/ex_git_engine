@@ -351,6 +351,7 @@ static ErlNifFunc git_engine_funcs[] =
 	{"commit_time", 1, git_engine_commit_time, 0},
 	{"commit_raw_header", 1, git_engine_commit_raw_header, 0},
 	{"commit_header", 2, git_engine_commit_header, 0},
+	{"commit_raw", 1, git_engine_commit_raw, 0},
 	{"tree_bypath", 2, git_engine_tree_bypath, 0},
 	{"tree_byid", 2, git_engine_tree_byid, 0},
 	{"tree_nth", 2, git_engine_tree_nth, 0},
