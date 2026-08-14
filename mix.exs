@@ -16,6 +16,7 @@ defmodule ExGitEngine.Mixfile do
         "Elixir libgit2 wrapper with GenServer-based concurrent access and Git wire protocol",
       package: package(),
       start_permanent: Mix.env() == :prod,
+      consolidate_protocols: Mix.env() != :test,
       deps: deps(),
       aliases: aliases(),
       dialyzer: [plt_add_apps: [:ex_unit, :logger, :telemetry, :stream_split]]

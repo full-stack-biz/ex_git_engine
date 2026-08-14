@@ -181,9 +181,9 @@ git_engine_repository_is_empty(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv
 	if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **)&repo))
 		return enif_make_badarg(env);
 
-	empty = git_repository_is_empty(repo->repo);
+	empty = git_repository_head_unborn(repo->repo);
 
-	if (empty)
+	if (empty == 1)
 		return atoms.true;
 
 	return atoms.false;
