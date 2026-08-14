@@ -515,6 +515,15 @@ defmodule ExGitEngine.GitAgent do
     do: exec(agent, {:commit_gpg_signature, commit}, opts)
 
   @doc """
+  Returns the signed data of the given `commit` — the commit content with the
+  signature header stripped. This is the byte sequence the commit signature
+  covers, needed for signature verification.
+  """
+  @spec commit_raw(agent, GitCommit.t(), keyword) :: {:ok, binary} | {:error, term}
+  def commit_raw(agent, commit, opts \\ []),
+    do: exec(agent, {:commit_raw, commit}, opts)
+
+  @doc """
   Creates a commit with the given `tree_oid` and `parents_oid`.
   """
   @spec commit_create(agent, map, map, binary, Git.oid(), [Git.oid()], keyword) ::
@@ -1035,6 +1044,9 @@ defmodule ExGitEngine.GitAgent do
 
   defp call(_handle, {:commit_gpg_signature, %GitCommit{__ref__: commit}}),
     do: Git.commit_header(commit, "gpgsig")
+
+  defp call(_handle, {:commit_raw, %GitCommit{__ref__: commit}}),
+    do: Git.commit_raw(commit)
 
   defp call(
          handle,

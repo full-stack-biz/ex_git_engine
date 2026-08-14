@@ -780,6 +780,16 @@ defmodule ExGitEngine.Git do
   end
 
   @doc """
+  Returns the signed data of the given `commit` — the commit content with the
+  signature header stripped. This is the byte sequence that a commit signature
+  covers, suitable for passing to a signature verification routine.
+  """
+  @spec commit_raw(commit) :: {:ok, binary} | {:error, term}
+  def commit_raw(_commit) do
+    :erlang.nif_error(:not_loaded)
+  end
+
+  @doc """
   Retrieves a tree entry owned by the given `tree`, given its id.
   """
   @spec tree_byid(tree, oid) :: {:ok, integer, atom, binary, binary} | {:error, term}

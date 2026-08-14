@@ -255,6 +255,54 @@ defmodule ExGitEngine.GitAgentTest do
     end
   end
 
+  describe "commit_raw/2" do
+    test "returns commit content for unsigned commit", %{agent: agent} do
+      {:ok, ref} = GitAgent.branch(agent, "main")
+      {:ok, commit} = GitAgent.peel(agent, ref)
+      assert {:ok, data} = GitAgent.commit_raw(agent, commit)
+      assert is_binary(data)
+      assert data =~ "tree "
+      assert data =~ "author "
+      refute data =~ "gpgsig"
+    end
+
+    test "returns signed data binary for SSH-signed commit" do
+      path = Path.join(System.tmp_dir(), "ex_git_engine-signed-#{:erlang.unique_integer()}")
+      File.mkdir_p!(path)
+
+      key_path = Path.join(path, "test_key")
+      System.cmd("ssh-keygen", ["-t", "ed25519", "-N", "", "-f", key_path], stderr_to_stdout: true)
+
+      cmd = fn args -> System.cmd("git", ["-C", path | args], stderr_to_stdout: true) end
+
+      cmd.(["init"])
+      cmd.(["config", "user.email", "test@example.com"])
+      cmd.(["config", "user.name", "Test User"])
+      cmd.(["config", "gpg.format", "ssh"])
+      cmd.(["config", "user.signingkey", key_path <> ".pub"])
+
+      File.write!(Path.join(path, "README.md"), "# Hello\n")
+      cmd.(["add", "."])
+      cmd.(["commit", "-S", "-m", "signed commit"])
+
+      {:ok, agent} = GitAgent.start_link(path)
+
+      on_exit(fn ->
+        if Process.alive?(agent), do: GenServer.stop(agent)
+        File.rm_rf!(path)
+      end)
+
+      {:ok, ref} = GitAgent.branch(agent, "main")
+      {:ok, commit} = GitAgent.peel(agent, ref)
+
+      assert {:ok, data} = GitAgent.commit_raw(agent, commit)
+      assert is_binary(data)
+      assert data =~ "tree "
+      assert data =~ "author "
+      refute data =~ "gpgsig"
+    end
+  end
+
   describe "history/2" do
     test "returns all commits reachable from main", %{agent: agent} do
       {:ok, ref} = GitAgent.branch(agent, "main")
