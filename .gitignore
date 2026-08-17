@@ -21,3 +21,6 @@ erl_crash.dump
 
 # NIF library
 priv/ex_git_engine_nif.so*
+
+# Mutation testing report
+/muex-report.json

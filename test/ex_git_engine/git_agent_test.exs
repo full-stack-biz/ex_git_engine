@@ -455,6 +455,215 @@ defmodule ExGitEngine.GitAgentTest do
     end
   end
 
+  describe "commit_gpg_signature/2" do
+    test "returns ok with signature or error if unsigned", %{agent: agent} do
+      {:ok, ref} = GitAgent.branch(agent, "main")
+      {:ok, commit} = GitAgent.peel(agent, ref)
+      result = GitAgent.commit_gpg_signature(agent, commit)
+      # Either signed (global git config may auto-sign) or unsigned
+      assert match?({:ok, sig} when is_binary(sig), result) or match?({:error, _}, result)
+    end
+  end
+
+  describe "diff/4, diff_stats/3, diff_deltas/3" do
+    test "returns a GitDiff between two commits", %{agent: agent} do
+      {:ok, main_ref} = GitAgent.branch(agent, "main")
+      {:ok, feat_ref} = GitAgent.branch(agent, "feature")
+      {:ok, main_commit} = GitAgent.peel(agent, main_ref)
+      {:ok, feat_commit} = GitAgent.peel(agent, feat_ref)
+      assert {:ok, %ExGitEngine.GitDiff{}} = GitAgent.diff(agent, main_commit, feat_commit)
+    end
+
+    test "diff_stats returns files_changed, insertions, deletions", %{agent: agent} do
+      {:ok, main_ref} = GitAgent.branch(agent, "main")
+      {:ok, feat_ref} = GitAgent.branch(agent, "feature")
+      {:ok, main_commit} = GitAgent.peel(agent, main_ref)
+      {:ok, feat_commit} = GitAgent.peel(agent, feat_ref)
+      {:ok, diff} = GitAgent.diff(agent, main_commit, feat_commit)
+
+      assert {:ok, %{files_changed: files, insertions: ins, deletions: del}} =
+               GitAgent.diff_stats(agent, diff)
+
+      assert files > 0
+      assert is_integer(ins)
+      assert is_integer(del)
+    end
+
+    test "diff_deltas returns list of delta maps", %{agent: agent} do
+      {:ok, main_ref} = GitAgent.branch(agent, "main")
+      {:ok, feat_ref} = GitAgent.branch(agent, "feature")
+      {:ok, main_commit} = GitAgent.peel(agent, main_ref)
+      {:ok, feat_commit} = GitAgent.peel(agent, feat_ref)
+      {:ok, diff} = GitAgent.diff(agent, main_commit, feat_commit)
+
+      assert {:ok, deltas} = GitAgent.diff_deltas(agent, diff)
+      assert is_list(deltas)
+      assert length(deltas) > 0
+    end
+  end
+
+  describe "branches/2 and branch/3 with :with option" do
+    test "branches returns {ref, commit} pairs", %{agent: agent} do
+      {:ok, branches} = GitAgent.branches(agent, with: :commit)
+      results = Enum.to_list(branches)
+      assert length(results) == 3
+
+      for {ref, commit} <- results do
+        assert %GitRef{type: :branch} = ref
+        assert %ExGitEngine.GitCommit{} = commit
+      end
+    end
+
+    test "branch returns {ref, commit} pair", %{agent: agent} do
+      assert {:ok, {%GitRef{name: "main"}, %ExGitEngine.GitCommit{}}} =
+               GitAgent.branch(agent, "main", with: :commit)
+    end
+  end
+
+  describe "tags/2 and tag/3 with :with option" do
+    test "tags returns {tag, commit} pairs", %{agent: agent} do
+      {:ok, tags} = GitAgent.tags(agent, with: :commit)
+      results = Enum.to_list(tags)
+      assert length(results) == 2
+
+      for {tag, commit} <- results do
+        assert is_struct(tag)
+        assert %ExGitEngine.GitCommit{} = commit
+      end
+    end
+
+    test "tag returns {ref, commit} pair for lightweight tag", %{agent: agent} do
+      assert {:ok, {%GitRef{name: "v1.0"}, %ExGitEngine.GitCommit{}}} =
+               GitAgent.tag(agent, "v1.0", with: :commit)
+    end
+  end
+
+  describe "odb/1 and odb operations" do
+    test "odb returns a GitOdb struct", %{agent: agent} do
+      assert {:ok, %ExGitEngine.GitOdb{}} = GitAgent.odb(agent)
+    end
+
+    test "odb_read returns type and raw data for a known oid", %{agent: agent} do
+      {:ok, ref} = GitAgent.branch(agent, "main")
+      {:ok, commit} = GitAgent.peel(agent, ref)
+      {:ok, odb} = GitAgent.odb(agent)
+
+      assert {:ok, {:commit, data}} = GitAgent.odb_read(agent, odb, commit.oid)
+      assert is_binary(data)
+      assert data =~ "tree "
+    end
+
+    test "odb_object_exists? returns true for a known oid", %{agent: agent} do
+      {:ok, ref} = GitAgent.branch(agent, "main")
+      {:ok, commit} = GitAgent.peel(agent, ref)
+      {:ok, odb} = GitAgent.odb(agent)
+
+      assert {:ok, true} = GitAgent.odb_object_exists?(agent, odb, commit.oid)
+    end
+
+    test "odb_object_exists? returns false for unknown oid", %{agent: agent} do
+      {:ok, odb} = GitAgent.odb(agent)
+      fake_oid = :binary.copy(<<0>>, 20)
+      assert {:ok, false} = GitAgent.odb_object_exists?(agent, odb, fake_oid)
+    end
+  end
+
+  describe "pack_create/3" do
+    test "returns a binary PACK for a commit oid", %{agent: agent} do
+      {:ok, ref} = GitAgent.branch(agent, "main")
+      {:ok, commit} = GitAgent.peel(agent, ref)
+
+      assert {:ok, pack} = GitAgent.pack_create(agent, [commit.oid])
+      assert is_binary(pack)
+      assert byte_size(pack) > 0
+      assert binary_part(pack, 0, 4) == "PACK"
+    end
+  end
+
+  describe "merge_commits/4" do
+    test "returns a GitIndex merging two diverged commits", %{agent: agent} do
+      {:ok, main_ref} = GitAgent.branch(agent, "main")
+      {:ok, feat_ref} = GitAgent.branch(agent, "feature")
+      {:ok, main_commit} = GitAgent.peel(agent, main_ref)
+      {:ok, feat_commit} = GitAgent.peel(agent, feat_ref)
+
+      assert {:ok, %ExGitEngine.GitIndex{}} =
+               GitAgent.merge_commits(agent, main_commit, feat_commit)
+    end
+  end
+
+  describe "idle_timeout" do
+    test "agent stops normally after idle timeout elapses" do
+      path = Path.join(System.tmp_dir(), "ex_git_engine-timeout-#{:erlang.unique_integer()}")
+      File.mkdir_p!(path)
+      System.cmd("git", ["-C", path, "init"], stderr_to_stdout: true)
+
+      {:ok, agent} = ExGitEngine.GitAgent.start_link(path, idle_timeout: 50)
+      on_exit(fn -> File.rm_rf!(path) end)
+
+      ref = Process.monitor(agent)
+      assert_receive {:DOWN, ^ref, :process, ^agent, :normal}, 500
+    end
+  end
+
+  describe "start_link with invalid path" do
+    test "returns error tuple for non-existent repo" do
+      # Use GenServer.start (no link) to avoid EXIT signal propagating to the test process
+      assert {:error, _reason} =
+               GenServer.start(ExGitEngine.GitAgent, {"/nonexistent/path/that/does/not/exist", []})
+    end
+  end
+
+  describe "cache callbacks" do
+    test "put_cache/3 and fetch_cache/2 round-trip" do
+      cache = GitAgent.init_cache("/tmp", [])
+      assert :ok = GitAgent.put_cache(cache, :my_key, {:ok, "value"})
+      assert {:ok, "value"} = GitAgent.fetch_cache(cache, :my_key)
+    end
+
+    test "fetch_cache/2 returns nil on miss" do
+      cache = GitAgent.init_cache("/tmp", [])
+      assert nil == GitAgent.fetch_cache(cache, :missing)
+    end
+  end
+
+  describe "make_cache_key/1" do
+    test "named transaction returns name" do
+      assert GitAgent.make_cache_key({:transaction, "my_tx", fn -> nil end}) == "my_tx"
+    end
+
+    test "unnamed transaction returns nil" do
+      assert GitAgent.make_cache_key({:transaction, nil, fn -> nil end}) == nil
+    end
+  end
+
+  describe "handle_info :DOWN" do
+    test "removes dead pid from mon map without crashing", %{agent: agent} do
+      fake_pid = spawn(fn -> :ok end)
+      send(agent, {:DOWN, make_ref(), :process, fake_pid, :normal})
+      :timer.sleep(20)
+      assert Process.alive?(agent)
+    end
+  end
+
+  describe "handle_info :timeout with :infinity" do
+    test "timeout message is a no-op when idle_timeout is :infinity" do
+      path = Path.join(System.tmp_dir(), "ex_git_engine-inf-#{:erlang.unique_integer()}")
+      File.mkdir_p!(path)
+      System.cmd("git", ["-C", path, "init"], stderr_to_stdout: true)
+      {:ok, agent} = GitAgent.start_link(path, idle_timeout: :infinity)
+
+      on_exit(fn ->
+        if Process.alive?(agent), do: GenServer.stop(agent)
+        File.rm_rf!(path)
+      end)
+
+      send(agent, :timeout)
+      :timer.sleep(50)
+      assert Process.alive?(agent)
+    end
+  end
+
   describe "graph_ahead_behind/3" do
     test "feature is 1 ahead and 0 behind main", %{agent: agent} do
       {:ok, main_ref} = GitAgent.branch(agent, "main")
