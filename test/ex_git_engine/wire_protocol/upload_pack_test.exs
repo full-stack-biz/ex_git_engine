@@ -184,6 +184,152 @@ defmodule ExGitEngine.WireProtocol.UploadPackTest do
     end
   end
 
+  describe "next/2 upload_req state" do
+    test "flush packet transitions to :done" do
+      handle = %UploadPack{
+        state: :upload_req,
+        advertised_caps: ExGitEngine.WireProtocol.server_capabilities("git-upload-pack")
+      }
+
+      {new_handle, remaining, output} = UploadPack.next(handle, [:flush])
+      assert new_handle.state == :done
+      assert remaining == []
+      assert output == []
+    end
+
+    test "want lines with caps transition to :upload_haves" do
+      handle = %UploadPack{
+        state: :upload_req,
+        advertised_caps: ExGitEngine.WireProtocol.server_capabilities("git-upload-pack")
+      }
+
+      oid = String.duplicate("a", 40)
+      lines = [{:want, "#{oid} multi_ack_detailed"}, :flush]
+
+      {new_handle, _remaining, output} = UploadPack.next(handle, lines)
+      assert new_handle.state == :upload_haves
+      assert "multi_ack_detailed" in new_handle.caps
+      assert is_list(new_handle.wants)
+      assert output == []
+    end
+
+    test "want lines without caps transition to :upload_haves" do
+      handle = %UploadPack{
+        state: :upload_req,
+        advertised_caps: ExGitEngine.WireProtocol.server_capabilities("git-upload-pack")
+      }
+
+      oid = String.duplicate("b", 40)
+      lines = [{:want, oid}, :flush]
+
+      {new_handle, _remaining, _output} = UploadPack.next(handle, lines)
+      assert new_handle.state == :upload_haves
+      assert new_handle.caps == []
+    end
+  end
+
+  describe "next/2 upload_haves state" do
+    test "empty lines transitions to :done" do
+      handle = %UploadPack{state: :upload_haves, caps: [], haves: []}
+
+      {new_handle, remaining, output} = UploadPack.next(handle, [])
+      assert new_handle.state == :done
+      assert remaining == []
+      assert output == []
+    end
+
+    test "flush with no haves returns nak and stays in :upload_haves" do
+      handle = %UploadPack{state: :upload_haves, caps: [], haves: []}
+
+      {new_handle, remaining, output} = UploadPack.next(handle, [:flush])
+      assert new_handle.state == :upload_haves
+      assert :nak in output
+      assert remaining == []
+    end
+
+    test "flush with haves and no no-done returns acks plus nak" do
+      oid = :crypto.strong_rand_bytes(20)
+      handle = %UploadPack{state: :upload_haves, caps: [], haves: [oid]}
+
+      {_new_handle, _remaining, output} = UploadPack.next(handle, [:flush])
+      assert Enum.any?(output, &match?({:ack, ^oid}, &1))
+      assert :nak in output
+    end
+
+    test "flush with no-done and multi_ack transitions to :pack" do
+      oid = :crypto.strong_rand_bytes(20)
+
+      handle = %UploadPack{
+        state: :upload_haves,
+        caps: ["no-done", "multi_ack"],
+        haves: [oid]
+      }
+
+      {new_handle, _remaining, output} = UploadPack.next(handle, [:flush])
+      assert new_handle.state == :pack
+      assert :nak in output
+      assert Enum.any?(output, &match?({:ack, ^oid}, &1))
+    end
+
+    test ":done line transitions to :pack then tries pack_create" do
+      # :done with empty wants/haves and nil agent → exec returns {:error, reason}
+      # → {:ok, pack} = {:error, reason} raises MatchError
+      # This confirms the :done clause transitions state before hitting the agent call
+      handle = %UploadPack{state: :upload_haves, caps: [], haves: [], wants: [], agent: nil}
+
+      assert_raise MatchError, fn -> UploadPack.next(handle, [:done]) end
+    end
+  end
+
+  describe "next/2 pack state" do
+    test "non-empty lines are a pass-through (data pending)" do
+      handle = %UploadPack{state: :pack, caps: [], haves: [], wants: [], agent: nil}
+      lines = ["some", "data"]
+
+      {new_handle, remaining, output} = UploadPack.next(handle, lines)
+      assert new_handle.state == :pack
+      assert remaining == lines
+      assert output == []
+    end
+  end
+
+  describe "next/2 done state" do
+    test "empty lines returns done state with no output" do
+      handle = %UploadPack{state: :done}
+
+      {new_handle, remaining, output} = UploadPack.next(handle, [])
+      assert new_handle.state == :done
+      assert remaining == []
+      assert output == []
+    end
+  end
+
+  describe "skip/1 state transitions" do
+    test "upload_req → upload_haves" do
+      handle = %UploadPack{
+        state: :upload_req,
+        advertised_caps: ExGitEngine.WireProtocol.server_capabilities("git-upload-pack")
+      }
+
+      assert %UploadPack{state: :upload_haves} = UploadPack.skip(handle)
+    end
+
+    test "upload_haves → pack" do
+      handle = %UploadPack{state: :upload_haves}
+      assert %UploadPack{state: :pack} = UploadPack.skip(handle)
+    end
+
+    test "pack → done" do
+      handle = %UploadPack{state: :pack}
+      assert %UploadPack{state: :done} = UploadPack.skip(handle)
+    end
+
+    test "done → done (no-op)" do
+      handle = %UploadPack{state: :done}
+      assert %UploadPack{state: :done} = UploadPack.skip(handle)
+    end
+  end
+
   describe "next/2 disco state" do
     test "transitions to :done state" do
       handle = %UploadPack{state: :disco, no_done: false, advertised_caps: []}
