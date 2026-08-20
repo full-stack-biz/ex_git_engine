@@ -4,7 +4,7 @@ defmodule ExGitEngine.Mixfile do
   def project do
     [
       app: :ex_git_engine,
-      version: "0.9.3",
+      version: "0.9.4",
       build_path: "_build",
       config_path: "config/config.exs",
       deps_path: "deps",
@@ -19,7 +19,10 @@ defmodule ExGitEngine.Mixfile do
       consolidate_protocols: Mix.env() != :test,
       deps: deps(),
       aliases: aliases(),
-      dialyzer: [plt_add_apps: [:ex_unit, :logger, :telemetry, :stream_split]],
+      dialyzer: [
+        plt_add_apps: [:ex_unit, :logger, :telemetry, :stream_split],
+        ignore_warnings: ".dialyzer_ignore.exs"
+      ],
       test_coverage: [tool: ExCoveralls]
     ]
   end

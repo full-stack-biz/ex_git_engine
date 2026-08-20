@@ -236,12 +236,7 @@ defmodule ExGitEngine.WireProtocol.ReceivePack do
 
   Encodes the line with the specified band number in PKT-LINE format.
   """
-  def sideband_wrap(line, band) when is_binary(line) do
-    data = line <> "\n"
-    size = byte_size(data) + 5
-    hex_size = size |> Integer.to_string(16) |> String.downcase() |> String.pad_leading(4, "0")
-    hex_size <> <<band>> <> data
-  end
+  defdelegate sideband_wrap(line, band), to: ExGitEngine.WireProtocol
 
   defp format_error_reason(reason) when is_binary(reason), do: reason
   defp format_error_reason(reason), do: inspect(reason)

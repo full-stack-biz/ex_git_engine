@@ -160,6 +160,5 @@ defmodule ExGitEngine.WireProtocolTest do
       {:halt, new_handle, _output} = WireProtocol.next(handle, "0000")
       assert new_handle.state == :done
     end
-
   end
 end
