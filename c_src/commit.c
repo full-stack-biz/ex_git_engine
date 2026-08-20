@@ -279,6 +279,41 @@ git_engine_commit_raw_header(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]
 }
 
 ERL_NIF_TERM
+git_engine_commit_raw(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+	int error;
+	git_buf signature = { NULL, 0, 0 };
+	git_buf signed_data = { NULL, 0, 0 };
+	ErlNifBinary bin;
+	git_engine_object *obj;
+	git_oid oid;
+
+	if (!enif_get_resource(env, argv[0], git_engine_object_type, (void **) &obj))
+		return enif_make_badarg(env);
+
+	git_oid_cpy(&oid, git_object_id(obj->obj));
+
+	error = git_commit_extract_signature(&signature, &signed_data, obj->repo->repo, &oid, NULL);
+	if (error < 0) {
+		git_buf_free(&signature);
+		git_buf_free(&signed_data);
+		return git_engine_error_struct(env, error);
+	}
+
+	if (!enif_alloc_binary(signed_data.size, &bin)) {
+		git_buf_free(&signature);
+		git_buf_free(&signed_data);
+		return git_engine_oom(env);
+	}
+
+	memcpy(bin.data, signed_data.ptr, signed_data.size);
+	git_buf_free(&signature);
+	git_buf_free(&signed_data);
+
+	return enif_make_tuple2(env, atoms.ok, enif_make_binary(env, &bin));
+}
+
+ERL_NIF_TERM
 git_engine_commit_header(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	int error;

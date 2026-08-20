@@ -181,9 +181,9 @@ git_engine_repository_is_empty(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv
 	if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **)&repo))
 		return enif_make_badarg(env);
 
-	empty = git_repository_is_empty(repo->repo);
+	empty = git_repository_head_unborn(repo->repo);
 
-	if (empty)
+	if (empty == 1)
 		return atoms.true;
 
 	return atoms.false;
@@ -242,6 +242,7 @@ git_engine_repository_clone(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	ErlNifBinary url, local_path;
 	ERL_NIF_TERM term_repo;
 	git_clone_options opts = GIT_CLONE_OPTIONS_INIT;
+	git_strarray headers = { NULL, 0 };
 
 	if (!enif_inspect_binary(env, argv[0], &url))
 		return enif_make_badarg(env);
@@ -258,7 +259,11 @@ git_engine_repository_clone(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	bare = !enif_compare(argv[2], atoms.true);
 	opts.bare = bare ? 1 : 0;
 
+	headers = git_strarray_from_list(env, argv[3]);
+	opts.fetch_opts.custom_headers = headers;
+
 	error = git_clone(&repo, (char *)url.data, (char *)local_path.data, &opts);
+	git_strarray_free(&headers);
 	if (error < 0)
 		return git_engine_error_struct(env, error);
 

@@ -163,8 +163,7 @@ defmodule ExGitEngine.WireProtocol.ReceivePack do
   @dialyzer {:no_match, handle_push_cmds: 1}
   defp handle_push_cmds(handle) do
     with :ok <- push_pack(handle.agent, handle.writepack, handle.writepack_progress),
-         :ok <- GitRepo.pre_push(handle.repo, handle.cmds),
-         :ok <- push_cmds(handle.agent, handle.cmds),
+         :ok <- push_cmds(handle.repo, handle.agent, handle.cmds),
          result <- GitRepo.push(handle.repo, handle.cmds) do
       case result do
         {:ok, repo} ->
@@ -237,12 +236,7 @@ defmodule ExGitEngine.WireProtocol.ReceivePack do
 
   Encodes the line with the specified band number in PKT-LINE format.
   """
-  def sideband_wrap(line, band) when is_binary(line) do
-    data = line <> "\n"
-    size = byte_size(data) + 5
-    hex_size = size |> Integer.to_string(16) |> String.downcase() |> String.pad_leading(4, "0")
-    hex_size <> <<band>> <> data
-  end
+  defdelegate sideband_wrap(line, band), to: ExGitEngine.WireProtocol
 
   defp format_error_reason(reason) when is_binary(reason), do: reason
   defp format_error_reason(reason), do: inspect(reason)
@@ -377,9 +371,20 @@ defmodule ExGitEngine.WireProtocol.ReceivePack do
 
   def validate_cmd(_agent, _cmd), do: :ok
 
-  defp push_cmds(agent, cmds) do
+  @doc """
+  Executes ref update commands inside a single GitAgent transaction.
+
+  Calls `GitRepo.pre_push/2` first — inside the transaction — so the
+  protection check and the ref update are serialized through the GenServer.
+  This prevents a race where two concurrent pushes both pass `pre_push`
+  before either commits, then the second one gets `:stale_ref` instead of
+  the expected pre_push rejection reason.
+  """
+  def push_cmds(repo, agent, cmds) do
     GitAgent.transaction(agent, fn agent ->
-      Enum.reduce_while(cmds, :ok, &apply_cmd(agent, &1, &2))
+      with :ok <- GitRepo.pre_push(repo, cmds) do
+        Enum.reduce_while(cmds, :ok, &apply_cmd(agent, &1, &2))
+      end
     end)
   end
 

@@ -389,9 +389,10 @@ defmodule ExGitEngine.Git do
 
   @doc """
   Clones a repository from `url` into `local_path`. Runs on a dirty IO scheduler.
+  Optionally accepts a list of extra HTTP headers (e.g. `["Authorization: Bearer token"]`).
   """
-  @spec repository_clone(binary, Path.t(), boolean) :: {:ok, repo} | {:error, term}
-  def repository_clone(_url, _local_path, _bare \\ true) do
+  @spec repository_clone(binary, Path.t(), boolean, [binary]) :: {:ok, repo} | {:error, term}
+  def repository_clone(_url, _local_path, _bare \\ true, _headers \\ []) do
     :erlang.nif_error(:not_loaded)
   end
 
@@ -776,6 +777,16 @@ defmodule ExGitEngine.Git do
   """
   @spec commit_header(commit, binary) :: {:ok, binary} | {:error, term}
   def commit_header(_commit, _field) do
+    :erlang.nif_error(:not_loaded)
+  end
+
+  @doc """
+  Returns the signed data of the given `commit` — the commit content with the
+  signature header stripped. This is the byte sequence that a commit signature
+  covers, suitable for passing to a signature verification routine.
+  """
+  @spec commit_raw(commit) :: {:ok, binary} | {:error, term}
+  def commit_raw(_commit) do
     :erlang.nif_error(:not_loaded)
   end
 
