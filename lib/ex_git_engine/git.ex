@@ -389,9 +389,10 @@ defmodule ExGitEngine.Git do
 
   @doc """
   Clones a repository from `url` into `local_path`. Runs on a dirty IO scheduler.
+  Optionally accepts a list of extra HTTP headers (e.g. `["Authorization: Bearer token"]`).
   """
-  @spec repository_clone(binary, Path.t(), boolean) :: {:ok, repo} | {:error, term}
-  def repository_clone(_url, _local_path, _bare \\ true) do
+  @spec repository_clone(binary, Path.t(), boolean, [binary]) :: {:ok, repo} | {:error, term}
+  def repository_clone(_url, _local_path, _bare \\ true, _headers \\ []) do
     :erlang.nif_error(:not_loaded)
   end
 

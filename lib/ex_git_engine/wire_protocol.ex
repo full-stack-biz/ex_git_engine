@@ -19,7 +19,6 @@ defmodule ExGitEngine.WireProtocol do
   alias ExGitEngine.Git
   alias ExGitEngine.GitAgent
   alias ExGitEngine.GitRef
-  alias ExGitEngine.WireProtocol.ReceivePack
 
   @upload_caps ~w(multi_ack multi_ack_detailed ofs-delta side-band side-band-64k)
   @receive_caps ~w(report-status report-status-v2 delete-refs ofs-delta atomic side-band-64k)
@@ -193,7 +192,7 @@ defmodule ExGitEngine.WireProtocol do
   def pkt_line({:ng, refname, reason}), do: pkt_line("ng #{refname} #{reason}")
 
   def pkt_line({:sideband, channel, text}),
-    do: ReceivePack.sideband_wrap(text, channel)
+    do: sideband_wrap(text, channel)
 
   def pkt_line({:sideband_pack, channel, data}) when is_binary(data) do
     size = byte_size(data) + 5
@@ -222,7 +221,7 @@ defmodule ExGitEngine.WireProtocol do
     do: pkt_line({:sideband_report, channel, inner})
 
   def pkt_line({:sideband, channel, text}, _caps),
-    do: ReceivePack.sideband_wrap(text, channel)
+    do: sideband_wrap(text, channel)
 
   def pkt_line(:flush, _caps), do: "0000"
   def pkt_line(<<"PACK", _rest::binary>> = pack, _caps), do: pack
@@ -231,6 +230,14 @@ defmodule ExGitEngine.WireProtocol do
     do:
       String.pad_leading(Integer.to_string(byte_size(data) + 5, 16) |> String.downcase(), 4, "0") <>
         data <> "\n"
+
+  @doc "Wraps `line` in PKT-LINE sideband framing for the given `band` channel."
+  def sideband_wrap(line, band) when is_binary(line) do
+    data = line <> "\n"
+    size = byte_size(data) + 5
+    hex_size = size |> Integer.to_string(16) |> String.downcase() |> String.pad_leading(4, "0")
+    hex_size <> <<band>> <> data
+  end
 
   defp __type__(%{__struct__: ExGitEngine.WireProtocol.UploadPack}), do: :upload_pack
   defp __type__(%{__struct__: ExGitEngine.WireProtocol.ReceivePack}), do: :receive_pack

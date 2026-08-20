@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.4] - 2026-08-20
+
+### Added
+
+- `Git.repository_clone/4` — fourth argument `headers :: [String.t()]` injects custom HTTP headers into the clone fetch via `git_fetch_options.custom_headers`, enabling authenticated clones (e.g. HTTP Signature headers for cross-forge federation).
+
+### Changed
+
+- `WireProtocol.sideband_wrap/2` moved from `WireProtocol.ReceivePack` to `WireProtocol`; `ReceivePack` delegates to it. Eliminates a circular compile-time dependency (`WireProtocol` aliasing `ReceivePack` while `ReceivePack` declared `@behaviour WireProtocol`). Existing callers of `ReceivePack.sideband_wrap/2` are unaffected.
+
 ## [0.9.3] - 2026-08-14
 
 ### Added
@@ -71,6 +81,8 @@ First release as a standalone Hex package, extracted and modernised from [git.li
 - Tag peeling and `GitAgent` tag-related functions.
 - `references_target` resolution for symbolic refs.
 
+[0.9.4]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.9.3...v0.9.4
+[0.9.3]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/full-stack-biz/ex_git_engine/releases/tag/v0.9.0

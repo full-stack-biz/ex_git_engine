@@ -271,7 +271,10 @@ defmodule ExGitEngine.GitAgentTest do
       File.mkdir_p!(path)
 
       key_path = Path.join(path, "test_key")
-      System.cmd("ssh-keygen", ["-t", "ed25519", "-N", "", "-f", key_path], stderr_to_stdout: true)
+
+      System.cmd("ssh-keygen", ["-t", "ed25519", "-N", "", "-f", key_path],
+        stderr_to_stdout: true
+      )
 
       cmd = fn args -> System.cmd("git", ["-C", path | args], stderr_to_stdout: true) end
 
@@ -498,7 +501,7 @@ defmodule ExGitEngine.GitAgentTest do
 
       assert {:ok, deltas} = GitAgent.diff_deltas(agent, diff)
       assert is_list(deltas)
-      assert length(deltas) > 0
+      assert deltas != []
     end
   end
 
@@ -610,7 +613,10 @@ defmodule ExGitEngine.GitAgentTest do
     test "returns error tuple for non-existent repo" do
       # Use GenServer.start (no link) to avoid EXIT signal propagating to the test process
       assert {:error, _reason} =
-               GenServer.start(ExGitEngine.GitAgent, {"/nonexistent/path/that/does/not/exist", []})
+               GenServer.start(
+                 ExGitEngine.GitAgent,
+                 {"/nonexistent/path/that/does/not/exist", []}
+               )
     end
   end
 
