@@ -389,10 +389,32 @@ defmodule ExGitEngine.Git do
 
   @doc """
   Clones a repository from `url` into `local_path`. Runs on a dirty IO scheduler.
-  Optionally accepts a list of extra HTTP headers (e.g. `["Authorization: Bearer token"]`).
+
+  - `headers` — static HTTP headers sent on every request (non-auth, e.g. User-Agent).
+  - `runner_pid` — PID of an Elixir process that handles credential requests. When
+    the server returns 401, the C callback sends `{:credential_request, res_term, url}`
+    to this PID. The runner must call `credential_deliver/2` with the result.
+    Pass `nil` to skip credential callback (public repos or pre-authenticated URLs).
   """
+  @spec repository_clone(binary, Path.t(), boolean, [binary], pid() | nil) ::
+          {:ok, repo} | {:error, term}
+  def repository_clone(_url, _local_path, _bare, _headers, _runner_pid) do
+    :erlang.nif_error(:not_loaded)
+  end
+
   @spec repository_clone(binary, Path.t(), boolean, [binary]) :: {:ok, repo} | {:error, term}
-  def repository_clone(_url, _local_path, _bare \\ true, _headers \\ []) do
+  def repository_clone(url, local_path, bare \\ true, headers \\ []) do
+    repository_clone(url, local_path, bare, headers, nil)
+  end
+
+  @doc """
+  Delivers credentials to a blocked `repository_clone` dirty NIF thread.
+
+  Called by the credential runner process in response to a `{:credential_request, res_term, url}`
+  message. `result` must be `{:ok, {username, password}}` or `:error`.
+  """
+  @spec credential_deliver(term, {:ok, {binary, binary}} | :error) :: :ok
+  def credential_deliver(_res_term, _result) do
     :erlang.nif_error(:not_loaded)
   end
 

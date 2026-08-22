@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.5] - 2026-08-22
+
+### Added
+
+- `Git.repository_clone/5` — fifth argument `runner_pid :: pid() | nil` wires a `git_credential_acquire_cb` into the clone. When the server returns 401, the C callback sends `{:credential_request, res_term, url}` to the runner process and blocks the dirty scheduler thread via `enif_cond_wait`. The runner calls `Git.credential_deliver/2` with `{:ok, {username, password}}` or `:error` to unblock and provide credentials.
+- `Git.credential_deliver/2` — NIF called by the runner to deliver credentials back to a blocked `repository_clone` dirty thread.
+- `Git.repository_clone/4` and below remain unchanged (call through to `/5` with `nil` runner — no credential callback).
+
 ## [0.9.4] - 2026-08-20
 
 ### Added

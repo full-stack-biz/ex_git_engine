@@ -1,5 +1,6 @@
 #include "erl_nif.h"
 #include "repository.h"
+#include "credential.h"
 #include "reference.h"
 #include "oid.h"
 #include "object.h"
@@ -38,6 +39,7 @@ ErlNifResourceType *git_engine_index_type;
 ErlNifResourceType *git_engine_config_type;
 ErlNifResourceType *git_engine_pack_type;
 ErlNifResourceType *git_engine_worktree_type;
+ErlNifResourceType *git_engine_credential_type;
 
 git_engine_atoms atoms;
 
@@ -109,6 +111,12 @@ static int load(ErlNifEnv *env, void **priv, ERL_NIF_TERM load_info)
 		"worktree_type", git_engine_worktree_free, ERL_NIF_RT_CREATE, NULL);
 
 	if (git_engine_worktree_type == NULL)
+		return -1;
+
+	git_engine_credential_type = enif_open_resource_type(env, NULL,
+		"credential_type", git_engine_credential_free, ERL_NIF_RT_CREATE, NULL);
+
+	if (git_engine_credential_type == NULL)
 		return -1;
 
 	atoms.ok = enif_make_atom(env, "ok");
@@ -309,7 +317,8 @@ static ErlNifFunc git_engine_funcs[] =
 	{"repository_get_odb", 1, git_engine_repository_odb, 0},
 	{"repository_get_index", 1, git_engine_repository_index, 0},
 	{"repository_get_config", 1, git_engine_repository_config, 0},
-	{"repository_clone", 4, git_engine_repository_clone, ERL_NIF_DIRTY_JOB_IO_BOUND},
+	{"repository_clone", 5, git_engine_repository_clone, ERL_NIF_DIRTY_JOB_IO_BOUND},
+	{"credential_deliver", 2, git_engine_credential_deliver, 0},
 	{"odb_object_hash", 2, git_engine_odb_hash, 0},
 	{"odb_object_exists?", 2, git_engine_odb_exists, 0},
 	{"odb_read", 2, git_engine_odb_read, 0},
