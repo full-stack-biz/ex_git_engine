@@ -298,6 +298,47 @@ git_engine_repository_clone(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 }
 
 ERL_NIF_TERM
+git_engine_repository_fetch(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+	int error;
+	git_repository *repo = NULL;
+	git_remote *remote = NULL;
+	ErlNifBinary repo_path, remote_url;
+	git_strarray refspecs = { NULL, 0 };
+	git_fetch_options fetch_opts = GIT_FETCH_OPTIONS_INIT;
+
+	if (!enif_inspect_binary(env, argv[0], &repo_path))
+		return enif_make_badarg(env);
+	if (!git_engine_terminate_binary(&repo_path))
+		return git_engine_oom(env);
+
+	if (!enif_inspect_binary(env, argv[1], &remote_url))
+		return enif_make_badarg(env);
+	if (!git_engine_terminate_binary(&remote_url))
+		return git_engine_oom(env);
+
+	refspecs = git_strarray_from_list(env, argv[2]);
+
+	error = git_repository_open(&repo, (char *)repo_path.data);
+	if (error < 0) goto done;
+
+	error = git_remote_create_anonymous(&remote, repo, (char *)remote_url.data);
+	if (error < 0) goto done;
+
+	error = git_remote_fetch(remote, &refspecs, &fetch_opts, "fetch");
+
+done:
+	if (remote) git_remote_free(remote);
+	if (repo) git_repository_free(repo);
+	git_strarray_free(&refspecs);
+
+	if (error < 0)
+		return git_engine_error_struct(env, error);
+
+	return atoms.ok;
+}
+
+ERL_NIF_TERM
 git_engine_repository_index(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	int error;

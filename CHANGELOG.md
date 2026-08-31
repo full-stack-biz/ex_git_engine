@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.6] - 2026-08-31
+
+### Added
+
+- `Git.repository_fetch/3` — NIF wrapping `git_remote_create_anonymous` + `git_remote_fetch`, registered as `ERL_NIF_DIRTY_JOB_IO_BOUND`. Fetches from a remote URL or local filesystem path into an existing bare repository using caller-supplied refspecs. Primary use case: syncing a fork with its upstream (`+refs/heads/*:refs/heads/*`).
+
 ## [0.9.5] - 2026-08-22
 
 ### Added
@@ -89,6 +95,8 @@ First release as a standalone Hex package, extracted and modernised from [git.li
 - Tag peeling and `GitAgent` tag-related functions.
 - `references_target` resolution for symbolic refs.
 
+[0.9.6]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.9.5...v0.9.6
+[0.9.5]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.9.1...v0.9.2

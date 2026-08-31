@@ -691,4 +691,38 @@ defmodule ExGitEngine.GitAgentTest do
                GitAgent.graph_ahead_behind(agent, main_commit.oid, feat_commit.oid)
     end
   end
+
+  describe "repository_fetch/3" do
+    test "fetches new commits from upstream into bare fork" do
+      tmp = Path.join(System.tmp_dir(), "fetch-test-#{:erlang.unique_integer()}")
+      upstream = Path.join(tmp, "upstream")
+      fork = Path.join(tmp, "fork.git")
+      File.mkdir_p!(upstream)
+
+      cmd_up = fn args -> System.cmd("git", ["-C", upstream | args], stderr_to_stdout: true) end
+      cmd_up.(["init"])
+      cmd_up.(["config", "user.email", "test@example.com"])
+      cmd_up.(["config", "user.name", "Test"])
+      File.write!(Path.join(upstream, "README.md"), "# v1\n")
+      cmd_up.(["add", "."])
+      cmd_up.(["commit", "-m", "initial commit"])
+
+      System.cmd("git", ["clone", "--bare", upstream, fork], stderr_to_stdout: true)
+
+      # Add a second commit to upstream
+      File.write!(Path.join(upstream, "v2.txt"), "v2\n")
+      cmd_up.(["add", "."])
+      cmd_up.(["commit", "-m", "second commit"])
+
+      {log_before, _} = System.cmd("git", ["-C", fork, "log", "--oneline"], stderr_to_stdout: true)
+      refute log_before =~ "second commit"
+
+      assert :ok = ExGitEngine.Git.repository_fetch(fork, upstream, ["+refs/heads/*:refs/heads/*"])
+
+      {log_after, _} = System.cmd("git", ["-C", fork, "log", "--oneline"], stderr_to_stdout: true)
+      assert log_after =~ "second commit"
+
+      on_exit(fn -> File.rm_rf!(tmp) end)
+    end
+  end
 end

@@ -318,6 +318,7 @@ static ErlNifFunc git_engine_funcs[] =
 	{"repository_get_index", 1, git_engine_repository_index, 0},
 	{"repository_get_config", 1, git_engine_repository_config, 0},
 	{"repository_clone", 5, git_engine_repository_clone, ERL_NIF_DIRTY_JOB_IO_BOUND},
+	{"repository_fetch", 3, git_engine_repository_fetch, ERL_NIF_DIRTY_JOB_IO_BOUND},
 	{"credential_deliver", 2, git_engine_credential_deliver, 0},
 	{"odb_object_hash", 2, git_engine_odb_hash, 0},
 	{"odb_object_exists?", 2, git_engine_odb_exists, 0},
