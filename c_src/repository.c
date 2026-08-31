@@ -1,4 +1,5 @@
 #include "repository.h"
+#include "credential.h"
 #include "object.h"
 #include "odb.h"
 #include "oid.h"
@@ -6,6 +7,7 @@
 #include "index.h"
 #include "ex_git_engine.h"
 #include <string.h>
+#include <stdlib.h>
 #include <git2.h>
 
 void git_engine_repository_free(ErlNifEnv *env, void *cd)
@@ -243,6 +245,8 @@ git_engine_repository_clone(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	ERL_NIF_TERM term_repo;
 	git_clone_options opts = GIT_CLONE_OPTIONS_INIT;
 	git_strarray headers = { NULL, 0 };
+	git_engine_credential_res *cred_res = NULL;
+	git_engine_credential_payload cred_payload;
 
 	if (!enif_inspect_binary(env, argv[0], &url))
 		return enif_make_badarg(env);
@@ -259,11 +263,29 @@ git_engine_repository_clone(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	bare = !enif_compare(argv[2], atoms.true);
 	opts.bare = bare ? 1 : 0;
 
+	/* argv[3]: static headers (non-auth) */
 	headers = git_strarray_from_list(env, argv[3]);
 	opts.fetch_opts.custom_headers = headers;
 
+	/* argv[4]: runner PID for credential callback, or nil/false to skip */
+	if (enif_get_local_pid(env, argv[4], &cred_payload.runner_pid)) {
+		cred_res = enif_alloc_resource(git_engine_credential_type,
+		                               sizeof(git_engine_credential_res));
+		memset(cred_res, 0, sizeof(git_engine_credential_res));
+		cred_res->mtx = enif_mutex_create((char *)"credential_mtx");
+		cred_res->cond = enif_cond_create((char *)"credential_cond");
+
+		cred_payload.env      = env;
+		cred_payload.res      = cred_res;
+		cred_payload.res_term = enif_make_resource(env, cred_res);
+
+		opts.fetch_opts.callbacks.credentials = git_engine_credential_acquire_cb;
+		opts.fetch_opts.callbacks.payload     = &cred_payload;
+	}
+
 	error = git_clone(&repo, (char *)url.data, (char *)local_path.data, &opts);
 	git_strarray_free(&headers);
+	if (cred_res) enif_release_resource(cred_res);
 	if (error < 0)
 		return git_engine_error_struct(env, error);
 
@@ -273,6 +295,47 @@ git_engine_repository_clone(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	enif_release_resource(res_repo);
 
 	return enif_make_tuple2(env, atoms.ok, term_repo);
+}
+
+ERL_NIF_TERM
+git_engine_repository_fetch(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+	int error;
+	git_repository *repo = NULL;
+	git_remote *remote = NULL;
+	ErlNifBinary repo_path, remote_url;
+	git_strarray refspecs = { NULL, 0 };
+	git_fetch_options fetch_opts = GIT_FETCH_OPTIONS_INIT;
+
+	if (!enif_inspect_binary(env, argv[0], &repo_path))
+		return enif_make_badarg(env);
+	if (!git_engine_terminate_binary(&repo_path))
+		return git_engine_oom(env);
+
+	if (!enif_inspect_binary(env, argv[1], &remote_url))
+		return enif_make_badarg(env);
+	if (!git_engine_terminate_binary(&remote_url))
+		return git_engine_oom(env);
+
+	refspecs = git_strarray_from_list(env, argv[2]);
+
+	error = git_repository_open(&repo, (char *)repo_path.data);
+	if (error < 0) goto done;
+
+	error = git_remote_create_anonymous(&remote, repo, (char *)remote_url.data);
+	if (error < 0) goto done;
+
+	error = git_remote_fetch(remote, &refspecs, &fetch_opts, "fetch");
+
+done:
+	if (remote) git_remote_free(remote);
+	if (repo) git_repository_free(repo);
+	git_strarray_free(&refspecs);
+
+	if (error < 0)
+		return git_engine_error_struct(env, error);
+
+	return atoms.ok;
 }
 
 ERL_NIF_TERM
