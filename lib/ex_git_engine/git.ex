@@ -408,6 +408,17 @@ defmodule ExGitEngine.Git do
   end
 
   @doc """
+  Fetches from `remote_url` into the repository at `repo_path` using the given `refspecs`.
+
+  Runs on a dirty IO scheduler. Suitable for both local filesystem paths and remote URLs.
+  Use `"+refs/heads/*:refs/heads/*"` to mirror all branches.
+  """
+  @spec repository_fetch(Path.t(), binary, [binary]) :: :ok | {:error, term}
+  def repository_fetch(_repo_path, _remote_url, _refspecs) do
+    :erlang.nif_error(:not_loaded)
+  end
+
+  @doc """
   Delivers credentials to a blocked `repository_clone` dirty NIF thread.
 
   Called by the credential runner process in response to a `{:credential_request, res_term, url}`

@@ -17,6 +17,7 @@ ERL_NIF_TERM git_engine_repository_odb(ErlNifEnv *env, int argc, const ERL_NIF_T
 ERL_NIF_TERM git_engine_repository_index(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 ERL_NIF_TERM git_engine_repository_config(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 ERL_NIF_TERM git_engine_repository_clone(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
+ERL_NIF_TERM git_engine_repository_fetch(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 
 void git_engine_repository_free(ErlNifEnv *env, void *cd);
 
