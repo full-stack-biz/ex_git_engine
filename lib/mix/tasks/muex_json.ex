@@ -19,8 +19,11 @@ defmodule Mix.Tasks.ExGitEngine.MuexJson do
     {excludes, muex_args} = extract_excludes(args)
 
     case Muex.Config.from_args(muex_args) do
-      {:error, reason} -> Mix.raise(reason)
-      {:ok, config} -> config |> apply_excludes(excludes) |> ensure_test_support_linked() |> run_with_config()
+      {:error, reason} ->
+        Mix.raise(reason)
+
+      {:ok, config} ->
+        config |> apply_excludes(excludes) |> ensure_test_support_linked() |> run_with_config()
     end
   end
 
@@ -65,7 +68,10 @@ defmodule Mix.Tasks.ExGitEngine.MuexJson do
 
   defp ensure_test_support_linked(config) do
     support = "test/support"
-    if support in config.test_paths, do: config, else: %{config | test_paths: [support | config.test_paths]}
+
+    if support in config.test_paths,
+      do: config,
+      else: %{config | test_paths: [support | config.test_paths]}
   end
 
   defp apply_excludes(config, []), do: config
