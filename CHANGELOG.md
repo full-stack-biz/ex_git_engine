@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.7] - 2026-09-04
+
+### Added
+
+- `Git.repository_fetch/4` — optional fourth argument `runner_pid :: pid() | nil` wires a `git_credential_acquire_cb` into the fetch, mirroring the existing pattern on `repository_clone/5`. When the server returns 401, the C callback sends `{:credential_request, res_term, url}` to the runner and blocks the dirty scheduler thread until `Git.credential_deliver/2` is called. The 3-arg form delegates to 4-arg with `nil` — existing callers are unchanged.
+
+### Fixed
+
+- `git_engine_credential_acquire_cb` now checks `allowed_types` before contacting the runner. If the server does not advertise `GIT_CREDENTIAL_USERPASS_PLAINTEXT` (e.g. Negotiate-only servers), the callback returns `GIT_PASSTHROUGH` immediately without sending a message to the runner or blocking the dirty scheduler thread.
+
 ## [0.9.6] - 2026-08-31
 
 ### Added

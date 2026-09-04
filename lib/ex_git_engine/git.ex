@@ -412,11 +412,18 @@ defmodule ExGitEngine.Git do
 
   Runs on a dirty IO scheduler. Suitable for both local filesystem paths and remote URLs.
   Use `"+refs/heads/*:refs/heads/*"` to mirror all branches.
+
+  Pass a `runner_pid` for authenticated remotes. The runner receives
+  `{:credential_request, res_term, url}` and must call `credential_deliver/2`.
+  Pass `nil` (or omit) for public repos.
   """
+  @spec repository_fetch(Path.t(), binary, [binary], pid() | nil) :: :ok | {:error, term}
+  def repository_fetch(_repo_path, _remote_url, _refspecs, _runner_pid),
+    do: :erlang.nif_error(:not_loaded)
+
   @spec repository_fetch(Path.t(), binary, [binary]) :: :ok | {:error, term}
-  def repository_fetch(_repo_path, _remote_url, _refspecs) do
-    :erlang.nif_error(:not_loaded)
-  end
+  def repository_fetch(repo_path, remote_url, refspecs),
+    do: repository_fetch(repo_path, remote_url, refspecs, nil)
 
   @doc """
   Delivers credentials to a blocked `repository_clone` dirty NIF thread.

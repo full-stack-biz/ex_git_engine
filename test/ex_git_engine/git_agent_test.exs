@@ -709,15 +709,17 @@ defmodule ExGitEngine.GitAgentTest do
 
       System.cmd("git", ["clone", "--bare", upstream, fork], stderr_to_stdout: true)
 
-      # Add a second commit to upstream
       File.write!(Path.join(upstream, "v2.txt"), "v2\n")
       cmd_up.(["add", "."])
       cmd_up.(["commit", "-m", "second commit"])
 
-      {log_before, _} = System.cmd("git", ["-C", fork, "log", "--oneline"], stderr_to_stdout: true)
+      {log_before, _} =
+        System.cmd("git", ["-C", fork, "log", "--oneline"], stderr_to_stdout: true)
+
       refute log_before =~ "second commit"
 
-      assert :ok = ExGitEngine.Git.repository_fetch(fork, upstream, ["+refs/heads/*:refs/heads/*"])
+      assert :ok =
+               ExGitEngine.Git.repository_fetch(fork, upstream, ["+refs/heads/*:refs/heads/*"])
 
       {log_after, _} = System.cmd("git", ["-C", fork, "log", "--oneline"], stderr_to_stdout: true)
       assert log_after =~ "second commit"
