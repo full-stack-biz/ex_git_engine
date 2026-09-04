@@ -19,6 +19,9 @@ int git_engine_credential_acquire_cb(
     unsigned int allowed_types,
     void *payload)
 {
+    if (!(allowed_types & GIT_CREDENTIAL_USERPASS_PLAINTEXT))
+        return GIT_PASSTHROUGH;
+
     git_engine_credential_payload *cp = (git_engine_credential_payload *)payload;
 
     /* Build {:credential_request, res_term, url_binary} and send to runner. */

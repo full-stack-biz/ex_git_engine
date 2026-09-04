@@ -306,6 +306,8 @@ git_engine_repository_fetch(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	ErlNifBinary repo_path, remote_url;
 	git_strarray refspecs = { NULL, 0 };
 	git_fetch_options fetch_opts = GIT_FETCH_OPTIONS_INIT;
+	git_engine_credential_res *cred_res = NULL;
+	git_engine_credential_payload cred_payload;
 
 	if (!enif_inspect_binary(env, argv[0], &repo_path))
 		return enif_make_badarg(env);
@@ -319,6 +321,22 @@ git_engine_repository_fetch(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 	refspecs = git_strarray_from_list(env, argv[2]);
 
+	/* argv[3]: runner PID for credential callback, or nil/false to skip */
+	if (enif_get_local_pid(env, argv[3], &cred_payload.runner_pid)) {
+		cred_res = enif_alloc_resource(git_engine_credential_type,
+		                               sizeof(git_engine_credential_res));
+		memset(cred_res, 0, sizeof(git_engine_credential_res));
+		cred_res->mtx = enif_mutex_create((char *)"credential_mtx");
+		cred_res->cond = enif_cond_create((char *)"credential_cond");
+
+		cred_payload.env      = env;
+		cred_payload.res      = cred_res;
+		cred_payload.res_term = enif_make_resource(env, cred_res);
+
+		fetch_opts.callbacks.credentials = git_engine_credential_acquire_cb;
+		fetch_opts.callbacks.payload     = &cred_payload;
+	}
+
 	error = git_repository_open(&repo, (char *)repo_path.data);
 	if (error < 0) goto done;
 
@@ -330,6 +348,7 @@ git_engine_repository_fetch(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 done:
 	if (remote) git_remote_free(remote);
 	if (repo) git_repository_free(repo);
+	if (cred_res) enif_release_resource(cred_res);
 	git_strarray_free(&refspecs);
 
 	if (error < 0)
