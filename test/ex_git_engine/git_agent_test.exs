@@ -401,6 +401,16 @@ defmodule ExGitEngine.GitAgentTest do
       assert "feature" in names
       assert "v1.0" in names
     end
+
+    test "does not crash when repo has a symbolic ref", %{path: path, agent: agent} do
+      System.cmd("git", ["-C", path, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
+        stderr_to_stdout: true
+      )
+
+      {:ok, refs} = GitAgent.references(agent)
+      names = refs |> Enum.to_list() |> Enum.map(& &1.name)
+      refute nil in names
+    end
   end
 
   describe "references/2 with target: :commit" do

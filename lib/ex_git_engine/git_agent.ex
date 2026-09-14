@@ -874,10 +874,9 @@ defmodule ExGitEngine.GitAgent do
     case Git.reference_stream(handle, glob) do
       {:ok, stream} ->
         {:ok,
-         Stream.map(
-           stream,
-           &resolve_reference_peel!(&1, Keyword.get(opts, :target, :undefined), handle)
-         )}
+         stream
+         |> Stream.map(&resolve_reference_peel!(&1, Keyword.get(opts, :target, :undefined), handle))
+         |> Stream.reject(&is_nil/1)}
 
       {:error, reason} ->
         {:error, reason}
@@ -888,10 +887,9 @@ defmodule ExGitEngine.GitAgent do
     case Git.reference_stream(handle, glob) do
       {:ok, stream} ->
         stream =
-          Stream.map(
-            stream,
-            &resolve_reference_peel!(&1, Keyword.get(opts, :target, :undefined), handle)
-          )
+          stream
+          |> Stream.map(&resolve_reference_peel!(&1, Keyword.get(opts, :target, :undefined), handle))
+          |> Stream.reject(&is_nil/1)
 
         stream = Stream.map(stream, &{&1, resolve_peel!(&1, with_target, handle)})
         {:ok, stream}
@@ -1403,6 +1401,7 @@ defmodule ExGitEngine.GitAgent do
   defp resolve_writepack(writepack), do: %GitWritePack{__ref__: writepack}
 
   defp resolve_reference({nil, nil, :oid, _oid}), do: nil
+  defp resolve_reference({_name, _shorthand, :symbolic, _target}), do: nil
 
   defp resolve_reference({name, nil, :oid, oid}) do
     {prefix, shorthand} = prettify_ref(name)
