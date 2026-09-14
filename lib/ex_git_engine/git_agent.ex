@@ -1520,6 +1520,7 @@ defmodule ExGitEngine.GitAgent do
     fetch_reference_target(resolve_reference(ref), target, handle)
   end
 
+  defp fetch_reference_target(nil, _target, _handle), do: {:ok, nil}
   defp fetch_reference_target(ref, :undefined, _handle), do: {:ok, ref}
   defp fetch_reference_target(%GitRef{type: :branch} = ref, _target, _handle), do: {:ok, ref}
 
