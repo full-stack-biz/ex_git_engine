@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.9] - 2026-09-14
+
+### Fixed
+
+- `GitAgent.references/2` with an explicit `target:` option (e.g. `target: :commit`) no longer crashes when the repository contains symbolic refs. `fetch_reference_target/3` had no clause for `nil` when target was not `:undefined`; symbolic refs resolved to `nil` and then crashed the GenServer. Added `fetch_reference_target(nil, _target, _handle) -> {:ok, nil}` so they are short-circuited and subsequently filtered by the stream.
+
 ## [0.9.8] - 2026-09-14
 
 ### Fixed

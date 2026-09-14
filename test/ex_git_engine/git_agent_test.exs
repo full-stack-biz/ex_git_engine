@@ -426,6 +426,16 @@ defmodule ExGitEngine.GitAgentTest do
       names = refs |> Enum.to_list() |> Enum.map(& &1.name)
       assert "pull/1/head" in names
     end
+
+    test "does not crash when repo has a symbolic ref", %{path: path, agent: agent} do
+      System.cmd("git", ["-C", path, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
+        stderr_to_stdout: true
+      )
+
+      {:ok, refs} = GitAgent.references(agent, target: :commit, stream_chunk_size: :infinity)
+      names = refs |> Enum.to_list() |> Enum.map(& &1.name)
+      refute nil in names
+    end
   end
 
   describe "blame/2" do
