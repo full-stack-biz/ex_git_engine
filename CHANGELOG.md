@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.8] - 2026-09-14
+
+### Fixed
+
+- `GitAgent.references/2` no longer crashes when the repository contains symbolic refs (e.g. `refs/remotes/origin/HEAD`). `resolve_reference/1` previously had no clause for `:symbolic` tuples, raising `FunctionClauseError` and killing the GitAgent GenServer during SSH `git-upload-pack` reference discovery. Symbolic refs are now skipped (they carry no OID and should not be advertised to clients).
+
 ## [0.9.7] - 2026-09-04
 
 ### Added
