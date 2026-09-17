@@ -158,6 +158,8 @@ static int load(ErlNifEnv *env, void **priv, ERL_NIF_TERM load_info)
 	atoms.zlib_need_dict = enif_make_atom(env, "zlib_need_dict");
 	atoms.zlib_data_error = enif_make_atom(env, "zlib_data_error");
 	atoms.zlib_stream_error = enif_make_atom(env, "zlib_stream_error");
+	atoms.sha1 = enif_make_atom(env, "sha1");
+	atoms.sha256 = enif_make_atom(env, "sha256");
 	atoms.enomem = enif_make_atom(env, "enomem");
 	atoms.eunknown = enif_make_atom(env, "eunknown");
 	atoms.estruct = enif_make_atom(env, "__struct__");
@@ -307,7 +309,9 @@ int git_engine_string_to_bin(ErlNifBinary *bin, const char *str)
 
 static ErlNifFunc git_engine_funcs[] =
 {
-	{"repository_init", 3, git_engine_repository_init, 0},
+	{"repository_init", 4, git_engine_repository_init, 0},
+	{"sha256_supported?", 0, git_engine_sha256_supported, 0},
+	{"repository_oid_type", 1, git_engine_repository_oid_type, 0},
 	{"repository_open", 1, git_engine_repository_open, 0},
 	{"repository_discover", 1, git_engine_repository_discover, 0},
 	{"repository_bare?", 1, git_engine_repository_is_bare, 0},

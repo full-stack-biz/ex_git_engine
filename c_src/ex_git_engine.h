@@ -60,6 +60,43 @@ typedef struct {
 
 extern git_engine_atoms atoms;
 
+static inline git_oid_t git_engine_infer_oid_type(size_t rawsz) {
+#if defined(GIT_EXPERIMENTAL_SHA256) || LIBGIT2_VERSION_CHECK(2, 0, 0)
+	return (rawsz == GIT_OID_SHA256_SIZE) ? GIT_OID_SHA256 : GIT_OID_SHA1;
+#else
+	(void)rawsz;
+	return GIT_OID_SHA1;
+#endif
+}
+
+static inline size_t git_engine_oid_rawsz(git_oid_t t) {
+#if defined(GIT_EXPERIMENTAL_SHA256) || LIBGIT2_VERSION_CHECK(2, 0, 0)
+	return (t == GIT_OID_SHA256) ? GIT_OID_SHA256_SIZE : GIT_OID_SHA1_SIZE;
+#else
+	(void)t;
+	return GIT_OID_SHA1_SIZE;
+#endif
+}
+
+static inline size_t git_engine_oid_hexsz(git_oid_t t) {
+#if defined(GIT_EXPERIMENTAL_SHA256) || LIBGIT2_VERSION_CHECK(2, 0, 0)
+	return (t == GIT_OID_SHA256) ? GIT_OID_SHA256_HEXSIZE : GIT_OID_SHA1_HEXSIZE;
+#else
+	(void)t;
+	return GIT_OID_SHA1_HEXSIZE;
+#endif
+}
+
+#if defined(GIT_EXPERIMENTAL_SHA256) || LIBGIT2_VERSION_CHECK(2, 0, 0)
+#  define GIT_ENGINE_OID_FROMRAW(oid, data, sz) \
+	git_oid_fromraw((oid), (data), git_engine_infer_oid_type(sz))
+#  define GIT_ENGINE_OID_FROMSTRN(oid, str, len) \
+	git_oid_fromstrn((oid), (str), (len), git_engine_infer_oid_type((len)/2))
+#else
+#  define GIT_ENGINE_OID_FROMRAW(oid, data, sz) git_oid_fromraw((oid), (data))
+#  define GIT_ENGINE_OID_FROMSTRN(oid, str, len) git_oid_fromstrn((oid), (str), (len))
+#endif
+
 git_strarray git_strarray_from_list(ErlNifEnv *env, ERL_NIF_TERM list);
 
 /** NUL-terminate a binary */

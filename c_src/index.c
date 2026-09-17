@@ -11,12 +11,12 @@ void git_engine_index_free(ErlNifEnv *env, void *cd)
 	git_index_free(index->index);
 }
 
-ERL_NIF_TERM entry_to_term(ErlNifEnv *env, const git_index_entry *entry)
+ERL_NIF_TERM entry_to_term(ErlNifEnv *env, const git_index_entry *entry, git_oid_t oid_type)
 {
 	ErlNifBinary id, path;
 	size_t len;
 
-	if (git_engine_oid_bin(&id, &entry->id) < 0)
+	if (git_engine_oid_bin(&id, &entry->id, oid_type) < 0)
 		return git_engine_oom(env);
 
 	len = strlen(entry->path);
@@ -102,7 +102,7 @@ git_engine_index_write_tree(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (error < 0)
 		return git_engine_error_struct(env, error);
 
-	if (git_engine_oid_bin(&bin, &id) < 0)
+	if (git_engine_oid_bin(&bin, &id, argc == 2 ? repo->oid_type : index->oid_type) < 0)
 		return git_engine_oom(env);
 
 	return enif_make_tuple2(env, atoms.ok, enif_make_binary(env, &bin));
@@ -201,7 +201,7 @@ git_engine_index_add(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (!enif_inspect_binary(env, eentry[8], &id))
 		return enif_make_badarg(env);
 
-	git_oid_fromraw(&entry.id, id.data);
+	GIT_ENGINE_OID_FROMRAW(&entry.id, id.data, id.size);
 
 	error = git_index_add(index->index, &entry);
 	if (error < 0)
@@ -298,7 +298,7 @@ git_engine_index_nth(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (entry == NULL)
 		return git_engine_error(env);
 
-	return entry_to_term(env, entry);
+	return entry_to_term(env, entry, index->oid_type);
 }
 
 ERL_NIF_TERM
@@ -328,7 +328,7 @@ git_engine_index_get(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (entry == NULL)
 		return git_engine_error(env);
 
-	return entry_to_term(env, entry);
+	return entry_to_term(env, entry, index->oid_type);
 }
 
 ERL_NIF_TERM

@@ -66,7 +66,7 @@ git_engine_tag_peel(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (error < 0)
 		return git_engine_error_struct(env, error);
 
-	if(git_engine_oid_bin(&id, git_object_id(peeled->obj)) < 0) {
+	if(git_engine_oid_bin(&id, git_object_id(peeled->obj), obj->repo->oid_type) < 0) {
 		enif_release_resource(peeled);
 		git_object_free(obj->obj);
 		return git_engine_oom(env);

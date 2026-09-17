@@ -7,7 +7,7 @@
 #include "reference.h"
 #include "object.h"
 
-static int ref_target(ERL_NIF_TERM *out, ErlNifEnv *env, git_reference *ref)
+static int ref_target(ERL_NIF_TERM *out, ErlNifEnv *env, git_reference *ref, git_oid_t oid_type)
 {
 	ErlNifBinary bin;
 
@@ -15,7 +15,7 @@ static int ref_target(ERL_NIF_TERM *out, ErlNifEnv *env, git_reference *ref)
 		const git_oid *id;
 		id = git_reference_target(ref);
 
-		if (git_engine_oid_bin(&bin, id) < 0)
+		if (git_engine_oid_bin(&bin, id, oid_type) < 0)
 			return -1;
 	} else {
 		const char *name;
@@ -164,7 +164,7 @@ git_engine_reference_peel(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (error < 0)
 		return git_engine_error_struct(env, error);
 
-	if (git_engine_oid_bin(&id, git_object_id(peeled->obj)) < 0) {
+	if (git_engine_oid_bin(&id, git_object_id(peeled->obj), repo->oid_type) < 0) {
 		enif_release_resource(peeled);
 		return git_engine_oom(env);
 	}
@@ -207,7 +207,7 @@ git_engine_reference_lookup(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 		return git_engine_error_struct(env, error);
 
 	type = ref_type(ref);
-	if (ref_target(&target, env, ref) < 0)
+	if (ref_target(&target, env, ref, repo->oid_type) < 0)
 		goto on_oom;
 
 	if (ref_shorthand(&shorthand, env, ref) < 0)
@@ -286,7 +286,7 @@ git_engine_reference_next(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 		return git_engine_error_struct(env, error);
 
 	type = ref_type(ref);
-	if (ref_target(&target, env, ref) < 0) {
+	if (ref_target(&target, env, ref, iter->repo->oid_type) < 0) {
 		git_reference_free(ref);
 		return git_engine_oom(env);
 	}
@@ -352,7 +352,7 @@ git_engine_reference_resolve(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]
 
 	memcpy(bin.data, name, len);
 
-	if (git_engine_oid_bin(&id, git_reference_target(resolved)) < 0)
+	if (git_engine_oid_bin(&id, git_reference_target(resolved), repo->oid_type) < 0)
 		goto on_oom;
 
 
@@ -395,7 +395,7 @@ git_engine_reference_dwim(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	}
 
 	type = ref_type(ref);
-	if (ref_target(&target, env, ref) < 0) {
+	if (ref_target(&target, env, ref, repo->oid_type) < 0) {
 		git_reference_free(ref);
 		return git_engine_oom(env);
 	}
@@ -462,7 +462,7 @@ git_engine_reference_to_id(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (error < 0)
 		return git_engine_error_struct(env, error);
 
-	if (git_engine_oid_bin(&bin, &id) < 0)
+	if (git_engine_oid_bin(&bin, &id, repo->oid_type) < 0)
 		return git_engine_oom(env);
 
 	return enif_make_tuple2(env, atoms.ok, enif_make_binary(env, &bin));

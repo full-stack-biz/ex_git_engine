@@ -9,6 +9,7 @@ extern ErlNifResourceType *git_engine_index_type;
 
 typedef struct {
 	git_index *index;
+	git_oid_t oid_type;
 } git_engine_index;
 
 void git_engine_index_free(ErlNifEnv *env, void *cd);

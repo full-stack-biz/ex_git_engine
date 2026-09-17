@@ -26,9 +26,9 @@ git_engine_blame_file(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	/* argv[2]: binary OID to blame from (newest commit), or nil for HEAD */
 	if (enif_compare(argv[2], atoms.nil) != 0) {
 		ErlNifBinary oid_bin;
-		if (!enif_inspect_binary(env, argv[2], &oid_bin) || oid_bin.size != GIT_OID_RAWSZ)
+		if (!enif_inspect_binary(env, argv[2], &oid_bin) || oid_bin.size != git_engine_oid_rawsz(repo->oid_type))
 			return enif_make_badarg(env);
-		git_oid_fromraw(&opts.newest_commit, oid_bin.data);
+		GIT_ENGINE_OID_FROMRAW(&opts.newest_commit, oid_bin.data, oid_bin.size);
 	}
 
 	if (!git_engine_terminate_binary(&path_bin))
@@ -54,7 +54,7 @@ git_engine_blame_file(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 		const char *name, *email;
 		git_time_t when;
 
-		if (git_engine_oid_bin(&oid_bin, &hunk->final_commit_id) < 0) {
+		if (git_engine_oid_bin(&oid_bin, &hunk->final_commit_id, repo->oid_type) < 0) {
 			enif_free(terms);
 			git_blame_free(blame);
 			return git_engine_oom(env);

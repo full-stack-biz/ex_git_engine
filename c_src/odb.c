@@ -131,7 +131,8 @@ git_engine_odb_hash(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 	enif_release_binary(&bin);
 
-	if (git_engine_oid_bin(&oid_bin, &oid) < 0)
+	/* ponytail: odb_hash is standalone, no repo ctx; SHA256 needs a repo-aware API */
+	if (git_engine_oid_bin(&oid_bin, &oid, GIT_OID_SHA1) < 0)
 		return git_engine_oom(env);
 
 	return enif_make_tuple2(env, atoms.ok, enif_make_binary(env, &oid_bin));
@@ -151,7 +152,7 @@ git_engine_odb_exists(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (!enif_inspect_binary(env, argv[1], &bin))
 		return enif_make_badarg(env);
 
-	git_oid_fromraw(&oid, bin.data);
+	GIT_ENGINE_OID_FROMRAW(&oid, bin.data, bin.size);
 	exists = git_odb_exists(odb->odb, &oid);
 
 	return exists ? atoms.true : atoms.false;
@@ -175,10 +176,10 @@ git_engine_odb_read(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (!enif_inspect_binary(env, argv[1], &bin))
 		return enif_make_badarg(env);
 
-	if (bin.size != GIT_OID_RAWSZ)
+	if (bin.size != git_engine_oid_rawsz(git_engine_infer_oid_type(bin.size)))
 		return enif_make_badarg(env);
 
-	git_oid_fromraw(&id, bin.data);
+	GIT_ENGINE_OID_FROMRAW(&id, bin.data, bin.size);
 
 	error = git_odb_read(&obj, odb->odb, &id);
 	if (error < 0)
@@ -221,7 +222,7 @@ git_engine_odb_write(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (error < 0)
 		return git_engine_error_struct(env, error);
 
-	if (git_engine_oid_bin(&oid_bin, &oid) < 0)
+	if (git_engine_oid_bin(&oid_bin, &oid, odb->oid_type) < 0)
 		return git_engine_oom(env);
 
 	return enif_make_tuple2(env, atoms.ok, enif_make_binary(env, &oid_bin));

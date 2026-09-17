@@ -6,6 +6,6 @@
 
 ERL_NIF_TERM git_engine_oid_fmt(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 ERL_NIF_TERM git_engine_oid_parse(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
-int git_engine_oid_bin(ErlNifBinary *bin, const git_oid *id);
+int git_engine_oid_bin(ErlNifBinary *bin, const git_oid *id, git_oid_t oid_type);
 
 #endif

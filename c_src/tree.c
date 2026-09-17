@@ -19,11 +19,11 @@ static int git_engine_string_bin(ErlNifBinary *bin, const char *str)
 	return 0;
 }
 
-static ERL_NIF_TERM tree_entry_to_term(ErlNifEnv *env, const git_tree_entry *entry)
+static ERL_NIF_TERM tree_entry_to_term(ErlNifEnv *env, const git_tree_entry *entry, git_oid_t oid_type)
 {
 	ErlNifBinary name, oid;
 
-	if (git_engine_oid_bin(&oid, git_tree_entry_id(entry)) < 0)
+	if (git_engine_oid_bin(&oid, git_tree_entry_id(entry), oid_type) < 0)
 		return git_engine_oom(env);
 
 	if (git_engine_string_bin(&name, git_tree_entry_name(entry)) < 0) {
@@ -54,16 +54,16 @@ git_engine_tree_byid(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (!enif_inspect_binary(env, argv[1], &bin))
 		return enif_make_badarg(env);
 
-	if (bin.size != GIT_OID_RAWSZ)
+	if (bin.size != git_engine_oid_rawsz(obj->repo->oid_type))
 		return enif_make_badarg(env);
 
-	git_oid_fromraw(&id, bin.data);
+	GIT_ENGINE_OID_FROMRAW(&id, bin.data, bin.size);
 
 	entry = git_tree_entry_byid((git_tree *)obj->obj, &id);
     if (entry == NULL)
         return git_engine_oom(env);
 
-	return tree_entry_to_term(env, entry);
+	return tree_entry_to_term(env, entry, obj->repo->oid_type);
 }
 
 ERL_NIF_TERM
@@ -88,7 +88,7 @@ git_engine_tree_bypath(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 		return git_engine_error_struct(env, error);
 
 	enif_release_binary(&bin);
-	return tree_entry_to_term(env, entry);
+	return tree_entry_to_term(env, entry, obj->repo->oid_type);
 }
 
 ERL_NIF_TERM
@@ -109,7 +109,7 @@ git_engine_tree_nth(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (!entry)
 		return git_engine_oom(env);
 
-	return tree_entry_to_term(env, entry);
+	return tree_entry_to_term(env, entry, obj->repo->oid_type);
 }
 
 ERL_NIF_TERM

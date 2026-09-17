@@ -22,6 +22,7 @@ extern ErlNifResourceType *git_engine_odb_writepack_type;
 
 typedef struct {
     git_odb *odb;
+    git_oid_t oid_type;
 } git_engine_odb;
 
 typedef struct {

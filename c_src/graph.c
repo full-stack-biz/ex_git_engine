@@ -22,18 +22,18 @@ git_engine_graph_ahead_behind(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[
     if (!enif_inspect_binary(env, argv[1], &bin))
         return enif_make_badarg(env);
 
-    if (bin.size != GIT_OID_RAWSZ)
+    if (bin.size != git_engine_oid_rawsz(repo->oid_type))
         return enif_make_badarg(env);
 
-    git_oid_fromraw(&local, bin.data);
+    GIT_ENGINE_OID_FROMRAW(&local, bin.data, bin.size);
 
     if (!enif_inspect_binary(env, argv[2], &bin))
         return enif_make_badarg(env);
 
-    if (bin.size != GIT_OID_RAWSZ)
+    if (bin.size != git_engine_oid_rawsz(repo->oid_type))
         return enif_make_badarg(env);
 
-    git_oid_fromraw(&upstream, bin.data);
+    GIT_ENGINE_OID_FROMRAW(&upstream, bin.data, bin.size);
 
     error = git_graph_ahead_behind(&ahead, &behind, repo->repo, &local, &upstream);
     if (error < 0)

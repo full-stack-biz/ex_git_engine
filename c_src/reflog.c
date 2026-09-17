@@ -67,10 +67,10 @@ git_engine_reflog_read(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 		entry = git_reflog_entry_byindex(reflog, i-1);
 
-		if (git_engine_oid_bin(&id_old, git_reflog_entry_id_old(entry)))
+		if (git_engine_oid_bin(&id_old, git_reflog_entry_id_old(entry), repo->oid_type))
 			goto on_oom;
 
-		if (git_engine_oid_bin(&id_new, git_reflog_entry_id_new(entry)))
+		if (git_engine_oid_bin(&id_new, git_reflog_entry_id_new(entry), repo->oid_type))
 			goto on_oom;
 
 		if (git_engine_signature_to_erl(&name, &email, &time, &offset,

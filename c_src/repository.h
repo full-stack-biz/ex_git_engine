@@ -27,6 +27,7 @@ extern ErlNifResourceType *git_engine_repository_type;
 
 typedef struct {
     git_repository *repo;
+    git_oid_t oid_type;
 } git_engine_repository;
 
 #endif

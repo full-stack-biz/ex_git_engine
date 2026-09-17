@@ -55,10 +55,10 @@ git_engine_pack_insert_commit(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[
 	if (!enif_inspect_binary(env, argv[1], &bin))
 		return enif_make_badarg(env);
 
-	if (bin.size != GIT_OID_RAWSZ)
+	if (bin.size != git_engine_oid_rawsz(pack->repo->oid_type))
 		return enif_make_badarg(env);
 
-	git_oid_fromraw(&id, bin.data);
+	GIT_ENGINE_OID_FROMRAW(&id, bin.data, bin.size);
 
 	error = git_packbuilder_insert_commit(pack->pack, &id);
 	if (error < 0)

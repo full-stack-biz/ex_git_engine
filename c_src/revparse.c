@@ -36,7 +36,7 @@ git_engine_revparse_single(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 	type = git_engine_object_type2atom(git_object_type(obj->obj));
 
-	if (git_engine_oid_bin(&id, git_object_id(obj->obj)) < 0)
+	if (git_engine_oid_bin(&id, git_object_id(obj->obj), repo->oid_type) < 0)
 		return git_engine_oom(env);
 
 
@@ -96,7 +96,7 @@ git_engine_revparse_ext(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 	type = git_engine_object_type2atom(git_object_type(obj->obj));
 
-	if (git_engine_oid_bin(&id, git_object_id(obj->obj)) < 0)
+	if (git_engine_oid_bin(&id, git_object_id(obj->obj), repo->oid_type) < 0)
 		return git_engine_oom(env);
 
 	term_obj = enif_make_resource(env, obj);

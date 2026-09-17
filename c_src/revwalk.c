@@ -88,9 +88,8 @@ git_engine_revwalk_next(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (!enif_get_resource(env, argv[0], git_engine_revwalk_type, (void **)&walk))
 		return enif_make_badarg(env);
 
-	if (!enif_alloc_binary(GIT_OID_RAWSZ, &bin))
+	if (!enif_alloc_binary(git_engine_oid_rawsz(walk->repo->oid_type), &bin))
 		return git_engine_oom(env);
-
 
 	error = git_revwalk_next((git_oid *)bin.data, walk->walk);
 	if (error < 0)

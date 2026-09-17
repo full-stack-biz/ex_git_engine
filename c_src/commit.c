@@ -42,7 +42,7 @@ git_engine_commit_parent(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	term_parent = enif_make_resource(env, parent);
 	enif_release_resource(parent);
 
-	if (git_engine_oid_bin(&bin, git_object_id(parent->obj)) < 0)
+	if (git_engine_oid_bin(&bin, git_object_id(parent->obj), obj->repo->oid_type) < 0)
 		return git_engine_oom(env);
 
 	parent->repo = obj->repo;
@@ -63,7 +63,7 @@ git_engine_commit_tree_id(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 	id = git_commit_tree_id((git_commit *) obj->obj);
 
-	if (git_engine_oid_bin(&bin, id) < 0)
+	if (git_engine_oid_bin(&bin, id, obj->repo->oid_type) < 0)
 		return git_engine_oom(env);
 
 	return enif_make_binary(env, &bin);
@@ -89,7 +89,7 @@ git_engine_commit_tree(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	term_tree = enif_make_resource(env, tree);
 	enif_release_resource(tree);
 
-	if (git_engine_oid_bin(&bin, git_object_id(tree->obj)) < 0)
+	if (git_engine_oid_bin(&bin, git_object_id(tree->obj), obj->repo->oid_type) < 0)
 		return git_engine_oom(env);
 
 	tree->repo = obj->repo;
@@ -148,10 +148,10 @@ git_engine_commit_create(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 	if (!enif_inspect_binary(env, argv[6], &bin))
 		return enif_make_badarg(env);
-	if (bin.size != GIT_OID_RAWSZ)
+	if (bin.size != git_engine_oid_rawsz(repo->oid_type))
 		return enif_make_badarg(env);
 
-	git_oid_fromraw(&tree, bin.data);
+	GIT_ENGINE_OID_FROMRAW(&tree, bin.data, bin.size);
 
 	if (!enif_get_list_length(env, argv[7], &parents_len))
 		return enif_make_badarg(env);
@@ -169,10 +169,10 @@ git_engine_commit_create(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	while (enif_get_list_cell(env, tail, &head, &tail)) {
 		if (!enif_inspect_binary(env, head, &bin))
 			return enif_make_badarg(env);
-		if (bin.size != GIT_OID_RAWSZ)
+		if (bin.size != git_engine_oid_rawsz(repo->oid_type))
 			return enif_make_badarg(env);
 
-		git_oid_fromraw(&parents_ids[i], bin.data);
+		GIT_ENGINE_OID_FROMRAW(&parents_ids[i], bin.data, bin.size);
 		parents_ids_ptrs[i] = &parents_ids[i];
 		i++;
 	}
@@ -181,10 +181,10 @@ git_engine_commit_create(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (error < 0)
 		return git_engine_error_struct(env, error);
 
-	if (!enif_realloc_binary(&bin, GIT_OID_RAWSZ))
+	if (!enif_realloc_binary(&bin, git_engine_oid_rawsz(repo->oid_type)))
 		return git_engine_oom(env);
 
-	memcpy(bin.data, &commit_id, GIT_OID_RAWSZ);
+	memcpy(bin.data, &commit_id, git_engine_oid_rawsz(repo->oid_type));
 
 	return enif_make_tuple2(env, atoms.ok, enif_make_binary(env, &bin));
 }

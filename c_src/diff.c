@@ -21,6 +21,7 @@ typedef struct {
 	ErlNifEnv *env;
 	diff_delta **deltas;
 	size_t size;
+	git_oid_t oid_type;
 } diff_pack;
 
 static git_diff_format_t diff_format_atom2type(ERL_NIF_TERM term)
@@ -80,11 +81,11 @@ static git_diff_options diff_opts_atom2type(ErlNifEnv *env, ERL_NIF_TERM keyword
 	return opts;
 }
 
-static ERL_NIF_TERM diff_file_to_term(ErlNifEnv *env, const git_diff_file *file)
+static ERL_NIF_TERM diff_file_to_term(ErlNifEnv *env, const git_diff_file *file, git_oid_t oid_type)
 {
 	ErlNifBinary path, oid;
 
-	if (git_engine_oid_bin(&oid, &file->id) < 0)
+	if (git_engine_oid_bin(&oid, &file->id, oid_type) < 0)
 		return git_engine_oom(env);
 
 	if (git_engine_string_to_bin(&path, file->path) < 0) {
@@ -138,11 +139,11 @@ static ERL_NIF_TERM diff_hunk_to_term(ErlNifEnv *env, const git_diff_hunk *hunk)
 	);
 }
 
-static ERL_NIF_TERM diff_delta_to_term(ErlNifEnv *env, const git_diff_delta *delta)
+static ERL_NIF_TERM diff_delta_to_term(ErlNifEnv *env, const git_diff_delta *delta, git_oid_t oid_type)
 {
 	return enif_make_tuple4(env,
-		diff_file_to_term(env, &delta->old_file),
-		diff_file_to_term(env, &delta->new_file),
+		diff_file_to_term(env, &delta->old_file, oid_type),
+		diff_file_to_term(env, &delta->new_file, oid_type),
 		enif_make_uint(env, delta->nfiles),
 		enif_make_uint(env, delta->similarity)
 	);
@@ -153,7 +154,7 @@ static int diff_delta_file_cb(const git_diff_delta *delta, float progress, void 
 	diff_pack* pack = payload;
 	diff_delta *delta_pack = malloc(sizeof(diff_delta));
 
-	*delta_pack = (diff_delta){ diff_delta_to_term(pack->env, delta), NULL, 0 };
+	*delta_pack = (diff_delta){ diff_delta_to_term(pack->env, delta, pack->oid_type), NULL, 0 };
 	pack->deltas[pack->size++] = delta_pack;
 	return 0;
 }
@@ -286,7 +287,7 @@ git_engine_diff_deltas(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	if (!enif_get_resource(env, argv[0], git_engine_diff_type, (void **) &diff))
 		return enif_make_badarg(env);
 
-	pack = (diff_pack){ env, (diff_delta **)malloc(sizeof(git_diff_delta *) * git_diff_num_deltas(diff->diff)), 0};
+	pack = (diff_pack){ env, (diff_delta **)malloc(sizeof(git_diff_delta *) * git_diff_num_deltas(diff->diff)), 0, diff->repo->oid_type};
 	error = git_diff_foreach(diff->diff, diff_delta_file_cb, diff_delta_bin_cb, diff_delta_hunk_cb, diff_delta_line_cb, &pack);
 	if (error < 0)
 		return git_engine_error_struct(env, error);

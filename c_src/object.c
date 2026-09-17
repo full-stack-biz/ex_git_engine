@@ -79,10 +79,10 @@ git_engine_object_lookup(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
     if (!enif_inspect_binary(env, argv[1], &bin))
         return enif_make_badarg(env);
 
-    if (bin.size != GIT_OID_RAWSZ)
+    if (bin.size != git_engine_oid_rawsz(repo->oid_type))
         return enif_make_badarg(env);
 
-    git_oid_fromraw(&id, bin.data);
+    GIT_ENGINE_OID_FROMRAW(&id, bin.data, bin.size);
 
     obj = enif_alloc_resource(git_engine_object_type, sizeof(git_engine_object));
     if (!obj)
@@ -113,7 +113,7 @@ git_engine_object_id(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
     id = git_object_id(obj->obj);
 
-    if (git_engine_oid_bin(&bin, id) < 0)
+    if (git_engine_oid_bin(&bin, id, obj->repo->oid_type) < 0)
         return git_engine_oom(env);
 
     return enif_make_tuple2(env, atoms.ok, enif_make_binary(env, &bin));

@@ -65,21 +65,21 @@ git_engine_merge_base(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 	if (!enif_inspect_binary(env, argv[1], &bin1))
 		return enif_make_badarg(env);
-	if (bin1.size != GIT_OID_RAWSZ)
+	if (bin1.size != git_engine_oid_rawsz(repo->oid_type))
 		return enif_make_badarg(env);
-	git_oid_fromraw(&oid1, bin1.data);
+	GIT_ENGINE_OID_FROMRAW(&oid1, bin1.data, bin1.size);
 
 	if (!enif_inspect_binary(env, argv[2], &bin2))
 		return enif_make_badarg(env);
-	if (bin2.size != GIT_OID_RAWSZ)
+	if (bin2.size != git_engine_oid_rawsz(repo->oid_type))
 		return enif_make_badarg(env);
-	git_oid_fromraw(&oid2, bin2.data);
+	GIT_ENGINE_OID_FROMRAW(&oid2, bin2.data, bin2.size);
 
 	error = git_merge_base(&base_oid, repo->repo, &oid1, &oid2);
 	if (error < 0)
 		return git_engine_error_struct(env, error);
 
-	if (git_engine_oid_bin(&out, &base_oid) < 0)
+	if (git_engine_oid_bin(&out, &base_oid, repo->oid_type) < 0)
 		return git_engine_oom(env);
 
 	return enif_make_tuple2(env, atoms.ok, enif_make_binary(env, &out));
