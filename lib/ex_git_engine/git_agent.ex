@@ -875,7 +875,9 @@ defmodule ExGitEngine.GitAgent do
       {:ok, stream} ->
         {:ok,
          stream
-         |> Stream.map(&resolve_reference_peel!(&1, Keyword.get(opts, :target, :undefined), handle))
+         |> Stream.map(
+           &resolve_reference_peel!(&1, Keyword.get(opts, :target, :undefined), handle)
+         )
          |> Stream.reject(&is_nil/1)}
 
       {:error, reason} ->
@@ -888,7 +890,9 @@ defmodule ExGitEngine.GitAgent do
       {:ok, stream} ->
         stream =
           stream
-          |> Stream.map(&resolve_reference_peel!(&1, Keyword.get(opts, :target, :undefined), handle))
+          |> Stream.map(
+            &resolve_reference_peel!(&1, Keyword.get(opts, :target, :undefined), handle)
+          )
           |> Stream.reject(&is_nil/1)
 
         stream = Stream.map(stream, &{&1, resolve_peel!(&1, with_target, handle)})

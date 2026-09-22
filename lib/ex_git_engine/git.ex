@@ -390,13 +390,13 @@ defmodule ExGitEngine.Git do
   @doc """
   Clones a repository from `url` into `local_path`. Runs on a dirty IO scheduler.
 
-  - `headers` — static HTTP headers sent on every request (non-auth, e.g. User-Agent).
-  - `runner_pid` — PID of an Elixir process that handles credential requests. When
-    the server returns 401, the C callback sends `{:credential_request, res_term, url}`
-    to this PID. The runner must call `credential_deliver/2` with the result.
-    Pass `nil` to skip credential callback (public repos or pre-authenticated URLs).
+  - `headers` — static HTTP headers (non-auth, HTTP transport only).
+  - `auth` — one of:
+    - `nil` — no auth (public repos / system SSH agent)
+    - `pid()` — HTTP runner: receives `{:credential_request, res_term, url}`, calls `credential_deliver/2`
+    - `binary()` — SSH private key PEM for in-memory SSH key auth
   """
-  @spec repository_clone(binary, Path.t(), boolean, [binary], pid() | nil) ::
+  @spec repository_clone(binary, Path.t(), boolean, [binary], pid() | binary | nil) ::
           {:ok, repo} | {:error, term}
   def repository_clone(_url, _local_path, _bare, _headers, _runner_pid) do
     :erlang.nif_error(:not_loaded)

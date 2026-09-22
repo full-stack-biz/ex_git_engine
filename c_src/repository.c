@@ -235,6 +235,9 @@ git_engine_repository_odb(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	return enif_make_tuple2(env, atoms.ok, term_odb);
 }
 
+static int git_engine_ssh_credential_cb(git_credential **, const char *, const char *, unsigned int, void *);
+static int git_engine_ssh_cert_check_cb(git_cert *, int, const char *, void *);
+
 ERL_NIF_TERM
 git_engine_repository_clone(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
@@ -267,7 +270,10 @@ git_engine_repository_clone(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	headers = git_strarray_from_list(env, argv[3]);
 	opts.fetch_opts.custom_headers = headers;
 
-	/* argv[4]: runner PID for credential callback, or nil/false to skip */
+	/* argv[4]: PID = HTTP runner, binary = SSH key PEM, else = no auth */
+	ErlNifBinary ssh_key_bin;
+	char *ssh_private_key = NULL;
+
 	if (enif_get_local_pid(env, argv[4], &cred_payload.runner_pid)) {
 		cred_res = enif_alloc_resource(git_engine_credential_type,
 		                               sizeof(git_engine_credential_res));
@@ -281,11 +287,21 @@ git_engine_repository_clone(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 		opts.fetch_opts.callbacks.credentials = git_engine_credential_acquire_cb;
 		opts.fetch_opts.callbacks.payload     = &cred_payload;
+	} else if (enif_inspect_binary(env, argv[4], &ssh_key_bin)) {
+		ssh_private_key = malloc(ssh_key_bin.size + 1);
+		if (!ssh_private_key) { git_strarray_free(&headers); return git_engine_oom(env); }
+		memcpy(ssh_private_key, ssh_key_bin.data, ssh_key_bin.size);
+		ssh_private_key[ssh_key_bin.size] = '\0';
+
+		opts.fetch_opts.callbacks.credentials       = git_engine_ssh_credential_cb;
+		opts.fetch_opts.callbacks.certificate_check = git_engine_ssh_cert_check_cb;
+		opts.fetch_opts.callbacks.payload           = ssh_private_key;
 	}
 
 	error = git_clone(&repo, (char *)url.data, (char *)local_path.data, &opts);
 	git_strarray_free(&headers);
 	if (cred_res) enif_release_resource(cred_res);
+	if (ssh_private_key) free(ssh_private_key);
 	if (error < 0)
 		return git_engine_error_struct(env, error);
 
@@ -295,6 +311,28 @@ git_engine_repository_clone(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	enif_release_resource(res_repo);
 
 	return enif_make_tuple2(env, atoms.ok, term_repo);
+}
+
+static int
+git_engine_ssh_credential_cb(
+    git_credential **cred,
+    const char *url,
+    const char *username_from_url,
+    unsigned int allowed_types,
+    void *payload)
+{
+    (void)url;
+    if (!(allowed_types & GIT_CREDENTIAL_SSH_KEY) || !username_from_url)
+        return GIT_PASSTHROUGH;
+    return git_credential_ssh_key_memory_new(cred, username_from_url, NULL, (const char *)payload, "");
+}
+
+static int
+git_engine_ssh_cert_check_cb(git_cert *cert, int valid, const char *host, void *payload)
+{
+    (void)cert; (void)valid; (void)host; (void)payload;
+    /* ponytail: accept any host key; add fingerprint check if needed */
+    return 0;
 }
 
 ERL_NIF_TERM

@@ -403,7 +403,9 @@ defmodule ExGitEngine.GitAgentTest do
     end
 
     test "does not crash when repo has a symbolic ref", %{path: path, agent: agent} do
-      System.cmd("git", ["-C", path, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
+      System.cmd(
+        "git",
+        ["-C", path, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
         stderr_to_stdout: true
       )
 
@@ -428,7 +430,9 @@ defmodule ExGitEngine.GitAgentTest do
     end
 
     test "does not crash when repo has a symbolic ref", %{path: path, agent: agent} do
-      System.cmd("git", ["-C", path, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
+      System.cmd(
+        "git",
+        ["-C", path, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
         stderr_to_stdout: true
       )
 
