@@ -346,6 +346,8 @@ git_engine_repository_fetch(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	git_fetch_options fetch_opts = GIT_FETCH_OPTIONS_INIT;
 	git_engine_credential_res *cred_res = NULL;
 	git_engine_credential_payload cred_payload;
+	ErlNifBinary ssh_key_bin;
+	char *ssh_private_key = NULL;
 
 	if (!enif_inspect_binary(env, argv[0], &repo_path))
 		return enif_make_badarg(env);
@@ -359,7 +361,7 @@ git_engine_repository_fetch(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 	refspecs = git_strarray_from_list(env, argv[2]);
 
-	/* argv[3]: runner PID for credential callback, or nil/false to skip */
+	/* argv[3]: PID = HTTP runner, binary = SSH key PEM, else = no auth */
 	if (enif_get_local_pid(env, argv[3], &cred_payload.runner_pid)) {
 		cred_res = enif_alloc_resource(git_engine_credential_type,
 		                               sizeof(git_engine_credential_res));
@@ -373,6 +375,15 @@ git_engine_repository_fetch(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 		fetch_opts.callbacks.credentials = git_engine_credential_acquire_cb;
 		fetch_opts.callbacks.payload     = &cred_payload;
+	} else if (enif_inspect_binary(env, argv[3], &ssh_key_bin)) {
+		ssh_private_key = malloc(ssh_key_bin.size + 1);
+		if (!ssh_private_key) { git_strarray_free(&refspecs); return git_engine_oom(env); }
+		memcpy(ssh_private_key, ssh_key_bin.data, ssh_key_bin.size);
+		ssh_private_key[ssh_key_bin.size] = '\0';
+
+		fetch_opts.callbacks.credentials       = git_engine_ssh_credential_cb;
+		fetch_opts.callbacks.certificate_check = git_engine_ssh_cert_check_cb;
+		fetch_opts.callbacks.payload           = ssh_private_key;
 	}
 
 	error = git_repository_open(&repo, (char *)repo_path.data);
@@ -387,6 +398,7 @@ done:
 	if (remote) git_remote_free(remote);
 	if (repo) git_repository_free(repo);
 	if (cred_res) enif_release_resource(cred_res);
+	if (ssh_private_key) free(ssh_private_key);
 	git_strarray_free(&refspecs);
 
 	if (error < 0)
