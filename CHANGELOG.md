@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.2] - 2026-09-23
+
+### Fixed
+
+- SSH `git push` no longer crashes with `MatchError` when the ref update commands and their terminating flush-pkt arrive in separate SSH DATA messages. `git send-pack` writes them with separate `write()` calls (`send-pack.c`), so this split is common. `ReceivePack` now buffers commands in `pending_cmds` until the flush arrives.
+- SSH `git fetch`/`clone` no longer crashes with `MatchError` when `want` lines and their flush-pkt arrive in separate SSH DATA messages. `UploadPack` buffers them in `pending_wants`.
+- `WireProtocol.next/2` no longer crashes when an SSH DATA message ends partway through a pkt-line (including inside the 4-byte length header), e.g. when pushing many refs. The incomplete tail is held in `pkt_rest` and prepended to the next message.
+- `atomic` pushes are now all-or-nothing. Every command is validated before any ref is updated; on the first failure nothing is applied, the failing ref reports its own reason and every other ref reports `atomic push failure` (git `execute_commands_atomic`).
+- Push results are reported per ref, as git's `receive-pack` does: `unpack ok` followed by `ok <ref>` or `ng <ref> <reason>` for each ref. Previously one rejected ref marked every ref `ng` (including refs already updated) and sent the rejection reason as the unpack status. A `pre_push` rejection now reports `ng` for every ref with `unpack ok`.
+- Creating a ref that already exists (e.g. two concurrent pushes of the same new branch) is rejected with `ng <ref> reference already exists` instead of raising inside the `GitAgent` transaction, which killed the repository's `GitAgent` GenServer.
+
+### Changed
+
+- `ReceivePack.push_cmds/3` returns `{:ok, cmd_errors}` (a map of rejected refname to reason; empty when every ref was applied) instead of `:ok`. `{:error, reason}` is still returned when `GitRepo.pre_push/2` declines the push. New optional fourth argument `atomic?` (default `false`).
+- `GitRepo.push/2` receives only the commands that were applied, and is not called when every command was rejected.
+
+## [0.10.1] - 2026-09-22
+
+### Added
+
+- `Git.repository_fetch/4` — the fourth argument now also accepts a `binary()` SSH private key PEM for in-memory SSH key auth, mirroring `repository_clone/5`. Accepted values are `nil` (no auth / system SSH agent), `pid()` (HTTP credential runner) or `binary()` (SSH key PEM). The NIF uses `git_credential_ssh_key_memory_new`; no key file is written to disk.
+
+### Security
+
+- As with `repository_clone/5` in 0.10.0, the SSH host key is not verified when a PEM is given (`git_engine_ssh_cert_check_cb` accepts any host key).
+
+## [0.10.0] - 2026-09-22
+
+### Added
+
+- `Git.repository_clone/5` — the fifth argument now also accepts a `binary()` SSH private key PEM for in-memory SSH key auth. Accepted values are `nil` (no auth / system SSH agent), `pid()` (HTTP credential runner) or `binary()` (SSH key PEM). The NIF uses `git_credential_ssh_key_memory_new`; no key file is written to disk.
+
+### Security
+
+- When a PEM is given, the SSH host key is not verified: `git_engine_ssh_cert_check_cb` accepts any host key, so a man-in-the-middle is not detected.
+
 ## [0.9.9] - 2026-09-14
 
 ### Fixed

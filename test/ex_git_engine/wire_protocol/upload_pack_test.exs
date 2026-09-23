@@ -226,6 +226,23 @@ defmodule ExGitEngine.WireProtocol.UploadPackTest do
       assert new_handle.state == :upload_haves
       assert new_handle.caps == []
     end
+
+    test "want lines and flush in separate SSH DATA messages" do
+      handle = %UploadPack{
+        state: :upload_req,
+        advertised_caps: ExGitEngine.WireProtocol.server_capabilities("git-upload-pack")
+      }
+
+      oid = String.duplicate("c", 40)
+
+      {handle, [], []} = UploadPack.next(handle, [{:want, "#{oid} multi_ack_detailed"}])
+      assert handle.state == :upload_req
+
+      {handle, [], []} = UploadPack.next(handle, [:flush])
+      assert handle.state == :upload_haves
+      assert handle.caps == ["multi_ack_detailed"]
+      assert handle.wants == [ExGitEngine.Git.oid_parse(oid)]
+    end
   end
 
   describe "next/2 upload_haves state" do

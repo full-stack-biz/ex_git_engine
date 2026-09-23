@@ -22,6 +22,9 @@ defmodule ExGitEngine.WireProtocol.ReceivePack do
             client_caps: [],
             advertised_caps: [],
             cmds: [],
+            cmd_errors: %{},
+            pending_cmds: [],
+            pkt_rest: "",
             repo: nil,
             writepack: nil,
             writepack_progress: %{
@@ -44,6 +47,9 @@ defmodule ExGitEngine.WireProtocol.ReceivePack do
           state: :disco | :update_req | :pack | :buffer | :done,
           client_caps: [binary],
           cmds: [cmd],
+          cmd_errors: %{binary => term},
+          pending_cmds: [binary],
+          pkt_rest: binary,
           repo: GitRepo.t(),
           writepack: ExGitEngine.GitWritePack.t(),
           writepack_progress: Git.odb_writepack_progress()
@@ -70,53 +76,24 @@ defmodule ExGitEngine.WireProtocol.ReceivePack do
      reference_discovery(handle.agent, @service_name)}
   end
 
-  def next(%__MODULE__{state: :update_req} = handle, [:flush | lines]) do
+  def next(%__MODULE__{state: :update_req, pending_cmds: []} = handle, [:flush | lines]) do
     {%{handle | state: :done}, lines, []}
   end
 
-  def next(%__MODULE__{state: :update_req} = handle, []) do
+  def next(%__MODULE__{state: :update_req, pending_cmds: []} = handle, []) do
     {%{handle | state: :done}, [], []}
   end
 
-  def next(%__MODULE__{state: :update_req, advertised_caps: advertised_caps} = handle, lines) do
-    require Logger
+  def next(%__MODULE__{state: :update_req} = handle, lines) do
+    {_shallows, lines} = Enum.split_while(lines, &match?({:shallow, _oid}, &1))
+    {cmds, lines} = Enum.split_while(lines, &is_binary/1)
+    cmds = handle.pending_cmds ++ cmds
 
-    case GitAgent.odb_writepack(handle.agent) do
-      {:ok, writepack} ->
-        {_shallows, lines} = Enum.split_while(lines, &match?({:shallow, _oid}, &1))
-        {cmds, lines} = Enum.split_while(lines, &is_binary/1)
-        {caps, cmds} = parse_caps(cmds)
-
-        Logger.debug(
-          "UPDATE_REQ: client_caps=#{inspect(caps)}, advertised_caps=#{inspect(advertised_caps)}"
-        )
-
-        # Validate client capabilities against advertised capabilities per Git protocol spec
-        unknown_caps = ExGitEngine.WireProtocol.validate_capabilities(caps, advertised_caps)
-
-        if unknown_caps != [] do
-          Logger.error("UPDATE_REQ: client sent unknown capabilities: #{inspect(unknown_caps)}")
-          raise "unknown capabilities: #{inspect(unknown_caps)}"
-        end
-
-        [:flush | lines] = lines
-
-        parsed_cmds = parse_cmds(cmds)
-        Logger.debug("UPDATE_REQ parsed_cmds=#{inspect(parsed_cmds)}")
-
-        # If all commands are deletions, we transition to :done because no packfile is sent
-        state = if Enum.all?(parsed_cmds, &match?({:delete, _, _}, &1)), do: :done, else: :pack
-
-        {%{
-           handle
-           | state: state,
-             client_caps: caps,
-             cmds: parsed_cmds,
-             writepack: writepack
-         }, lines, []}
-
-      {:error, error} ->
-        raise error
+    case lines do
+      # Over SSH, git send-pack writes the commands and the terminating flush
+      # separately (send-pack.c), so they may arrive in different DATA messages.
+      [] -> {%{handle | pending_cmds: cmds}, [], []}
+      [:flush | lines] -> update_req(%{handle | pending_cmds: []}, cmds, lines)
     end
   end
 
@@ -160,33 +137,88 @@ defmodule ExGitEngine.WireProtocol.ReceivePack do
     end
   end
 
+  defp update_req(%__MODULE__{advertised_caps: advertised_caps} = handle, cmds, lines) do
+    case GitAgent.odb_writepack(handle.agent) do
+      {:ok, writepack} ->
+        {caps, cmds} = parse_caps(cmds)
+
+        Logger.debug(
+          "UPDATE_REQ: client_caps=#{inspect(caps)}, advertised_caps=#{inspect(advertised_caps)}"
+        )
+
+        # Validate client capabilities against advertised capabilities per Git protocol spec
+        unknown_caps = ExGitEngine.WireProtocol.validate_capabilities(caps, advertised_caps)
+
+        if unknown_caps != [] do
+          Logger.error("UPDATE_REQ: client sent unknown capabilities: #{inspect(unknown_caps)}")
+          raise "unknown capabilities: #{inspect(unknown_caps)}"
+        end
+
+        parsed_cmds = parse_cmds(cmds)
+        Logger.debug("UPDATE_REQ parsed_cmds=#{inspect(parsed_cmds)}")
+
+        # If all commands are deletions, we transition to :done because no packfile is sent
+        state = if Enum.all?(parsed_cmds, &match?({:delete, _, _}, &1)), do: :done, else: :pack
+
+        {%{
+           handle
+           | state: state,
+             client_caps: caps,
+             cmds: parsed_cmds,
+             writepack: writepack
+         }, lines, []}
+
+      {:error, error} ->
+        raise error
+    end
+  end
+
   @dialyzer {:no_match, handle_push_cmds: 1}
   defp handle_push_cmds(handle) do
-    with :ok <- push_pack(handle.agent, handle.writepack, handle.writepack_progress),
-         :ok <- push_cmds(handle.repo, handle.agent, handle.cmds),
-         result <- GitRepo.push(handle.repo, handle.cmds) do
-      case result do
-        {:ok, repo} ->
-          output = push_success_output(handle) ++ [:flush]
-          Logger.debug("HANDLE_PUSH_CMDS: no messages, output=#{inspect(output)}")
-          {%{handle | repo: repo, cmds: []}, [], output}
-
-        {:ok, repo, messages} ->
-          output = build_push_response(handle, messages)
-          Logger.debug("HANDLE_PUSH_CMDS: combined output=#{inspect(output)}")
-          {%{handle | repo: repo, cmds: []}, [], output}
-
-        {:error, reason} ->
-          error_msg = format_error_reason(reason)
-          output = push_error_output(handle, error_msg) ++ [:flush]
-          {handle, [], output}
-      end
-    else
-      {:error, reason} ->
-        error_msg = format_error_reason(reason)
-        output = push_error_output(handle, error_msg) ++ [:flush]
-        {handle, [], output}
+    case push_pack(handle.agent, handle.writepack, handle.writepack_progress) do
+      :ok -> update_refs(handle)
+      {:error, reason} -> error_output(handle, reason)
     end
+  end
+
+  # Rejected refs are reported per ref (`ng <ref> <reason>`) with `unpack ok`,
+  # as git's receive-pack does; only the refs actually updated reach GitRepo.push/2.
+  defp update_refs(handle) do
+    atomic? = "atomic" in handle.client_caps
+
+    cmd_errors =
+      case push_cmds(handle.repo, handle.agent, handle.cmds, atomic?) do
+        {:ok, cmd_errors} -> cmd_errors
+        {:error, reason} -> Map.new(handle.cmds, &{refname(&1), reason})
+      end
+
+    handle = %{handle | cmd_errors: cmd_errors}
+
+    case Enum.reject(handle.cmds, &Map.has_key?(cmd_errors, refname(&1))) do
+      [] -> {%{handle | cmds: []}, [], push_success_output(handle) ++ [:flush]}
+      applied -> notify_push(handle, applied)
+    end
+  end
+
+  defp notify_push(handle, applied) do
+    case GitRepo.push(handle.repo, applied) do
+      {:ok, repo} ->
+        output = push_success_output(handle) ++ [:flush]
+        Logger.debug("HANDLE_PUSH_CMDS: no messages, output=#{inspect(output)}")
+        {%{handle | repo: repo, cmds: []}, [], output}
+
+      {:ok, repo, messages} ->
+        output = build_push_response(handle, messages)
+        Logger.debug("HANDLE_PUSH_CMDS: combined output=#{inspect(output)}")
+        {%{handle | repo: repo, cmds: []}, [], output}
+
+      {:error, reason} ->
+        error_output(handle, reason)
+    end
+  end
+
+  defp error_output(handle, reason) do
+    {handle, [], push_error_output(handle, format_error_reason(reason)) ++ [:flush]}
   end
 
   @doc """
@@ -243,11 +275,7 @@ defmodule ExGitEngine.WireProtocol.ReceivePack do
 
   defp push_error_output(handle, error_msg) do
     if report_status_advertised?(handle.advertised_caps) do
-      cmd_rejections =
-        Enum.map(handle.cmds, fn cmd ->
-          refname = elem(cmd, :erlang.tuple_size(cmd) - 1)
-          {:ng, refname, error_msg}
-        end)
+      cmd_rejections = Enum.map(handle.cmds, &{:ng, refname(&1), error_msg})
 
       report = [{:unpack, error_msg}] ++ cmd_rejections
 
@@ -325,15 +353,21 @@ defmodule ExGitEngine.WireProtocol.ReceivePack do
 
   Returns tuples indicating successful update status for each ref command.
   """
-  def report_status(%__MODULE__{cmds: cmds}) do
+  def report_status(%__MODULE__{cmds: cmds, cmd_errors: cmd_errors}) do
     ref_statuses =
       Enum.map(cmds, fn cmd ->
-        refname = elem(cmd, :erlang.tuple_size(cmd) - 1)
-        {:ok, refname}
+        name = refname(cmd)
+
+        case Map.fetch(cmd_errors, name) do
+          {:ok, reason} -> {:ng, name, format_error_reason(reason)}
+          :error -> {:ok, name}
+        end
       end)
 
     [{:unpack, "ok"} | ref_statuses]
   end
+
+  defp refname(cmd), do: elem(cmd, tuple_size(cmd) - 1)
 
   defp report_status_advertised?(caps),
     do: "report-status" in caps or "report-status-v2" in caps
@@ -369,7 +403,12 @@ defmodule ExGitEngine.WireProtocol.ReceivePack do
     end
   end
 
-  def validate_cmd(_agent, _cmd), do: :ok
+  def validate_cmd(agent, {:create, _new_oid, name}) do
+    case GitAgent.reference(agent, name) do
+      {:ok, _ref} -> {:error, "reference already exists"}
+      {:error, _not_found} -> :ok
+    end
+  end
 
   @doc """
   Executes ref update commands inside a single GitAgent transaction.
@@ -379,23 +418,58 @@ defmodule ExGitEngine.WireProtocol.ReceivePack do
   This prevents a race where two concurrent pushes both pass `pre_push`
   before either commits, then the second one gets `:stale_ref` instead of
   the expected pre_push rejection reason.
+
+  Returns `{:ok, cmd_errors}` mapping each rejected refname to its reason, or
+  `{:error, reason}` when `pre_push` declines the whole push.
+
+  Non-atomic: each valid command is applied, invalid ones are skipped.
+  Atomic: every command is validated before any is applied; on the first
+  failure nothing is applied and every other ref is rejected with
+  "atomic push failure" (git receive-pack.c `execute_commands_atomic`).
   """
-  def push_cmds(repo, agent, cmds) do
+  def push_cmds(repo, agent, cmds, atomic? \\ false) do
     GitAgent.transaction(agent, fn agent ->
       with :ok <- GitRepo.pre_push(repo, cmds) do
-        Enum.reduce_while(cmds, :ok, &apply_cmd(agent, &1, &2))
+        apply_cmds(agent, cmds, atomic?)
       end
     end)
   end
 
-  defp apply_cmd(agent, cmd, :ok) do
-    case validate_cmd(agent, cmd) do
-      :ok ->
-        push_cmd(agent, cmd)
-        {:cont, :ok}
+  defp apply_cmds(agent, cmds, true), do: apply_atomic(agent, cmds)
+  defp apply_cmds(agent, cmds, false), do: apply_each(agent, cmds)
 
-      error ->
-        {:halt, error}
+  defp apply_each(agent, cmds) do
+    cmd_errors =
+      Enum.reduce(cmds, %{}, fn cmd, cmd_errors ->
+        case validate_cmd(agent, cmd) do
+          :ok ->
+            push_cmd(agent, cmd)
+            cmd_errors
+
+          {:error, reason} ->
+            Map.put(cmd_errors, refname(cmd), reason)
+        end
+      end)
+
+    {:ok, cmd_errors}
+  end
+
+  defp apply_atomic(agent, cmds) do
+    case Enum.find_value(cmds, &validation_error(agent, &1)) do
+      nil ->
+        Enum.each(cmds, &push_cmd(agent, &1))
+        {:ok, %{}}
+
+      {name, reason} ->
+        cmd_errors = Map.new(cmds, &{refname(&1), "atomic push failure"})
+        {:ok, Map.put(cmd_errors, name, reason)}
+    end
+  end
+
+  defp validation_error(agent, cmd) do
+    case validate_cmd(agent, cmd) do
+      :ok -> nil
+      {:error, reason} -> {refname(cmd), reason}
     end
   end
 
