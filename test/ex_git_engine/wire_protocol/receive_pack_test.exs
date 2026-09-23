@@ -868,13 +868,14 @@ defmodule ExGitEngine.WireProtocol.ReceivePackTest do
       assert ref.oid == oid_b
     end
 
+    # A rejected ref is not an unpack failure: `unpack ok` + `ng <ref> <reason>` (receive-pack.c report()).
     test "stale ref update is rejected and ref is unchanged",
          %{agent: agent, oid_a: oid_a, oid_b: oid_b} do
       # Claim oid_b is current but server has oid_a
       handle = done_handle(agent, [{:update, oid_b, oid_a, "refs/heads/main"}])
       {_h, [], output} = ReceivePack.next(handle, [])
 
-      refute {:unpack, "ok"} in output
+      assert output == [{:unpack, "ok"}, {:ng, "refs/heads/main", ":stale_ref"}, :flush]
       assert {:ok, ref} = GitAgent.reference(agent, "refs/heads/main")
       assert ref.oid == oid_a
     end
@@ -884,9 +885,116 @@ defmodule ExGitEngine.WireProtocol.ReceivePackTest do
       handle = done_handle(agent, [{:delete, oid_b, "refs/heads/main"}])
       {_h, [], output} = ReceivePack.next(handle, [])
 
-      refute {:unpack, "ok"} in output
+      assert output == [{:unpack, "ok"}, {:ng, "refs/heads/main", ":stale_ref"}, :flush]
       assert {:ok, ref} = GitAgent.reference(agent, "refs/heads/main")
       assert ref.oid == oid_a
+    end
+
+    # e.g. two clients pushing the same new branch concurrently
+    test "create of an existing ref is rejected, not raised",
+         %{agent: agent, oid_a: oid_a, oid_b: oid_b} do
+      handle = done_handle(agent, [{:create, oid_b, "refs/heads/main"}])
+      {_h, [], output} = ReceivePack.next(handle, [])
+
+      assert output == [
+               {:unpack, "ok"},
+               {:ng, "refs/heads/main", "reference already exists"},
+               :flush
+             ]
+
+      assert {:ok, ref} = GitAgent.reference(agent, "refs/heads/main")
+      assert ref.oid == oid_a
+    end
+
+    test "non-atomic push applies valid refs and reports each ref separately",
+         %{agent: agent, oid_a: oid_a, oid_b: oid_b} do
+      cmds = [{:update, oid_b, oid_a, "refs/heads/main"}, {:create, oid_b, "refs/heads/feature"}]
+      {_h, [], output} = ReceivePack.next(done_handle(agent, cmds), [])
+
+      assert output == [
+               {:unpack, "ok"},
+               {:ng, "refs/heads/main", ":stale_ref"},
+               {:ok, "refs/heads/feature"},
+               :flush
+             ]
+
+      assert {:ok, ref} = GitAgent.reference(agent, "refs/heads/feature")
+      assert ref.oid == oid_b
+    end
+
+    test "atomic push applies nothing when one ref fails",
+         %{agent: agent, oid_a: oid_a, oid_b: oid_b} do
+      cmds = [{:update, oid_b, oid_a, "refs/heads/main"}, {:create, oid_b, "refs/heads/feature"}]
+      handle = %{done_handle(agent, cmds) | client_caps: ["report-status", "atomic"]}
+      {_h, [], output} = ReceivePack.next(handle, [])
+
+      assert output == [
+               {:unpack, "ok"},
+               {:ng, "refs/heads/main", ":stale_ref"},
+               {:ng, "refs/heads/feature", "atomic push failure"},
+               :flush
+             ]
+
+      assert {:error, _} = GitAgent.reference(agent, "refs/heads/feature")
+    end
+
+    test "pre_push rejection reports every ref as ng with unpack ok",
+         %{agent: agent, oid_a: oid_a, oid_b: oid_b} do
+      repo = %TestRepo{pre_push_fn: fn _cmds -> {:error, "branch is protected"} end}
+      handle = %{done_handle(agent, [{:update, oid_a, oid_b, "refs/heads/main"}]) | repo: repo}
+      {_h, [], output} = ReceivePack.next(handle, [])
+
+      assert output == [
+               {:unpack, "ok"},
+               {:ng, "refs/heads/main", "branch is protected"},
+               :flush
+             ]
+    end
+
+    # git send-pack writes commands and the flush in separate writes (send-pack.c),
+    # so over SSH the flush can arrive in its own DATA message.
+    test "commands and flush in separate SSH DATA messages", %{agent: agent, oid_a: oid_a} do
+      handle = update_req_handle(agent)
+
+      assert {:cont, handle, []} = ExGitEngine.WireProtocol.next(handle, delete_main_pkt(oid_a))
+      assert handle.state == :update_req
+
+      assert {:halt, _handle, output} = ExGitEngine.WireProtocol.next(handle, "0000")
+      assert IO.iodata_to_binary(output) =~ "ok refs/heads/main"
+      assert {:error, _} = GitAgent.reference(agent, "refs/heads/main")
+    end
+
+    # A large command list can exceed one SSH DATA message and be split mid pkt-line,
+    # including inside the 4-byte length header.
+    for split_at <- [2, 10] do
+      test "pkt-line split at byte #{split_at} across SSH DATA messages",
+           %{agent: agent, oid_a: oid_a} do
+        <<chunk1::binary-size(unquote(split_at)), chunk2::binary>> = delete_main_pkt(oid_a)
+
+        assert {:cont, handle, []} =
+                 ExGitEngine.WireProtocol.next(update_req_handle(agent), chunk1)
+
+        assert handle.state == :update_req
+        assert {:cont, handle, []} = ExGitEngine.WireProtocol.next(handle, chunk2)
+        assert handle.state == :update_req
+
+        assert {:halt, _handle, output} = ExGitEngine.WireProtocol.next(handle, "0000")
+        assert IO.iodata_to_binary(output) =~ "ok refs/heads/main"
+        assert {:error, _} = GitAgent.reference(agent, "refs/heads/main")
+      end
+    end
+
+    defp update_req_handle(agent) do
+      %ReceivePack{
+        state: :update_req,
+        agent: agent,
+        advertised_caps: ExGitEngine.WireProtocol.server_capabilities("git-receive-pack")
+      }
+    end
+
+    defp delete_main_pkt(oid) do
+      cmd = "#{Base.encode16(oid, case: :lower)} #{String.duplicate("0", 40)} refs/heads/main"
+      ExGitEngine.WireProtocol.pkt_line(cmd <> "\0report-status")
     end
   end
 
@@ -1021,7 +1129,7 @@ defmodule ExGitEngine.WireProtocol.ReceivePackTest do
       repo = %TestRepo{pre_push_fn: fn _cmds -> :ok end}
       cmd = {:update, oid_a, oid_b, "refs/heads/main"}
 
-      assert :ok = ReceivePack.push_cmds(repo, agent, [cmd])
+      assert ReceivePack.push_cmds(repo, agent, [cmd]) == {:ok, %{}}
       assert {:ok, ref} = GitAgent.reference(agent, "refs/heads/main")
       assert ref.oid == oid_b
     end

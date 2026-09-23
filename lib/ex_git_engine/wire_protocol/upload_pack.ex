@@ -21,7 +21,9 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
     caps: [],
     advertised_caps: [],
     wants: [],
-    haves: []
+    haves: [],
+    pending_wants: [],
+    pkt_rest: ""
   ]
 
   @type t :: %__MODULE__{
@@ -31,7 +33,9 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
           caps: [binary],
           advertised_caps: [binary],
           wants: [Git.oid()],
-          haves: [Git.oid()]
+          haves: [Git.oid()],
+          pending_wants: [term],
+          pkt_rest: binary
         }
 
   #
@@ -52,29 +56,20 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
      reference_discovery(new_handle.agent, @service_name, handle.no_done)}
   end
 
-  def next(%__MODULE__{state: :upload_req} = handle, [:flush | lines]) do
+  def next(%__MODULE__{state: :upload_req, pending_wants: []} = handle, [:flush | lines]) do
     {%{handle | state: :done}, lines, []}
   end
 
-  def next(%__MODULE__{state: :upload_req, advertised_caps: advertised_caps} = handle, lines) do
+  def next(%__MODULE__{state: :upload_req} = handle, lines) do
     {wants, lines} = Enum.split_while(lines, &obj_match?(&1, :want))
-    {caps, wants} = parse_caps(wants)
-
-    Logger.debug(
-      "UPLOAD_REQ: client_caps=#{inspect(caps)}, advertised_caps=#{inspect(advertised_caps)}"
-    )
-
-    # Validate client capabilities against advertised capabilities per Git protocol spec
-    unknown_caps = ExGitEngine.WireProtocol.validate_capabilities(caps, advertised_caps)
-
-    if unknown_caps != [] do
-      Logger.error("UPLOAD_REQ: client sent unknown capabilities: #{inspect(unknown_caps)}")
-      raise "unknown capabilities: #{inspect(unknown_caps)}"
-    end
-
     {_shallows, lines} = Enum.split_while(lines, &obj_match?(&1, :shallow))
-    [:flush | lines] = lines
-    {%{handle | state: :upload_haves, caps: caps, wants: parse_cmds(wants)}, lines, []}
+    wants = handle.pending_wants ++ wants
+
+    case lines do
+      # The terminating flush may arrive in a later SSH DATA message.
+      [] -> {%{handle | pending_wants: wants}, [], []}
+      [:flush | lines] -> upload_req(%{handle | pending_wants: []}, wants, lines)
+    end
   end
 
   def next(%__MODULE__{state: :upload_haves} = handle, []) do
@@ -145,6 +140,24 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
 
   def next(%__MODULE__{state: :done} = handle, []) do
     {handle, [], []}
+  end
+
+  defp upload_req(%__MODULE__{advertised_caps: advertised_caps} = handle, wants, lines) do
+    {caps, wants} = parse_caps(wants)
+
+    Logger.debug(
+      "UPLOAD_REQ: client_caps=#{inspect(caps)}, advertised_caps=#{inspect(advertised_caps)}"
+    )
+
+    # Validate client capabilities against advertised capabilities per Git protocol spec
+    unknown_caps = ExGitEngine.WireProtocol.validate_capabilities(caps, advertised_caps)
+
+    if unknown_caps != [] do
+      Logger.error("UPLOAD_REQ: client sent unknown capabilities: #{inspect(unknown_caps)}")
+      raise "unknown capabilities: #{inspect(unknown_caps)}"
+    end
+
+    {%{handle | state: :upload_haves, caps: caps, wants: parse_cmds(wants)}, lines, []}
   end
 
   @impl true

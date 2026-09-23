@@ -94,8 +94,17 @@ defmodule ExGitEngine.WireProtocol do
       {service, lines} = exec_next(service, lines)
       exec_after(service, lines)
     else
-      {service, lines} = exec_next(service, Enum.to_list(decode(data)))
-      exec_after(service, lines)
+      # A DATA message may end mid pkt-line; hold the incomplete tail for the next one.
+      case split_complete(service.pkt_rest <> data) do
+        {"", rest} when rest != "" ->
+          {:cont, %{service | pkt_rest: rest}, []}
+
+        {complete, rest} ->
+          {service, lines} =
+            exec_next(%{service | pkt_rest: rest}, Enum.to_list(decode(complete)))
+
+          exec_after(service, lines)
+      end
     end
   end
 
@@ -408,6 +417,39 @@ defmodule ExGitEngine.WireProtocol do
       {:ok, head} -> %{head | prefix: "", name: "HEAD"}
       {:error, _reason} -> []
     end
+  end
+
+  # Splits `data` into complete pkt-lines and an incomplete trailing pkt-line.
+  # Pack data runs to the end of the message; invalid headers are left for
+  # `decode/1` to raise on.
+  defp split_complete(data, offset \\ 0) do
+    case data do
+      <<_::binary-size(^offset), "0000", _::binary>> ->
+        split_complete(data, offset + 4)
+
+      <<_::binary-size(^offset), "PACK", _::binary>> ->
+        {data, ""}
+
+      <<_::binary-size(^offset), hex::binary-size(4), rest::binary>> ->
+        case Integer.parse(hex, 16) do
+          {size, ""} when size > 4 and byte_size(rest) >= size - 4 ->
+            split_complete(data, offset + size)
+
+          {size, ""} when size > 4 ->
+            split_binary(data, offset)
+
+          _invalid ->
+            {data, ""}
+        end
+
+      _short ->
+        split_binary(data, offset)
+    end
+  end
+
+  defp split_binary(data, offset) do
+    <<complete::binary-size(^offset), rest::binary>> = data
+    {complete, rest}
   end
 
   defp pkt_stream(data) do
