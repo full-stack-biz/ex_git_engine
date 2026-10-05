@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-10-05
+
+### Changed
+
+- Long-running NIFs now run on dirty schedulers so they no longer block normal schedulers (and every process queued on them) for their whole duration: `diff_tree`, `diff_format`, `diff_stats`, `diff_deltas`, `pack_insert_commit`, `pack_insert_walk`, `pack_data`, `revwalk_pack`, `merge_base`, `merge_commits`, `graph_ahead_behind` and `pathspec_match_tree` (CPU-bound); `odb_write_pack`, `odb_writepack_append` and `odb_writepack_commit` (IO-bound). Previously a 680-file `diff_format` stalled its scheduler for ~270ms and a large `pack_create` for over 2s.
+
 ## [0.10.2] - 2026-09-23
 
 ### Fixed
