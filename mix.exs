@@ -4,7 +4,7 @@ defmodule ExGitEngine.Mixfile do
   def project do
     [
       app: :ex_git_engine,
-      version: "0.11.0",
+      version: "0.12.0",
       build_path: "_build",
       config_path: "config/config.exs",
       deps_path: "deps",
@@ -28,7 +28,7 @@ defmodule ExGitEngine.Mixfile do
   end
 
   def application do
-    [extra_applications: [:logger]]
+    [mod: {ExGitEngine.Application, []}, extra_applications: [:logger]]
   end
 
   def cli do

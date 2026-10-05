@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-10-05
+
+### Added
+
+- Paged access to large diffs, following libgit2's model (files by index, text diffs computed per file, hunks by index):
+  - `GitAgent.diff_files/3`: a page of a diff's files (`offset:`, `limit:`, default 1000, at most 5000) with `:index`, `:from`, `:to`, `:status`, plus the `:total`. Reads no file contents. Pages are bounded because the VM collects a larger NIF result on a dirty scheduler, where it waits behind long jobs.
+  - `GitAgent.diff_patch/4`: one file's computed diff: `:binary`, `:additions`, `:deletions`, `:hunks` with line ranges and `:origins` (one byte per line, enough to size its rendering without the text), and `:patch`, a `%GitPatch{}`.
+  - `GitAgent.diff_patch_text/3`: text of a `%GitPatch{}`, optionally only a range of its hunks (`hunks: 10..19`), each page with the file header so it parses on its own. Reads only the requested hunks; the file is not diffed again. The NIF yields (`enif_schedule_nif`) and counts its reductions, so long files neither block a scheduler nor take a dirty one.
+  - Diffs and patches are only used by the agent that created them: libgit2 objects other than the object database are not safe to use from two processes at once.
+- `ExGitEngine.JobLimiter`, started by the new `ExGitEngine.Application`: long agent operations that use nothing of the agent's repository handle (`pack_create`, `blame`, `graph_ahead_behind` on their own handle; `odb_writepack_commit` on its push's writepack) run outside the agent, at most `max_jobs` at a time (default: dirty CPU schedulers minus one; `config :ex_git_engine, max_jobs: n`), so they cannot take every dirty scheduler. Queued jobs whose caller has exited are dropped. Like a busy port, once `high_water` jobs are queued (default `10 * max_jobs`) it answers `{:error, :busy}` at once until the queue drains to `low_water` (default half).
+- `GitAgent.diff_file/5`: the patch text of one file between two revisions or trees, by path, for callers that hold no diff. The path is matched exactly.
+- `diff/4` option `exact_paths: true`: `:pathspec` entries are exact paths, not globs (`GIT_DIFF_DISABLE_PATHSPEC_MATCH`).
+
+### Fixed
+
+- `diff/4` options `context_lines` and `interhunk_lines` now take effect. The NIF stored the raw Erlang term instead of the integer.
+
+- `diff_format` and `diff_deltas` no longer fail with `illegal byte sequence` when a file under a diff driver (`diff=cpp`, `diff=perl`, …) contains non-UTF-8 bytes. libgit2 runs the driver's funcname regex on context lines for hunk headers, and the system regex rejects invalid UTF-8 under a UTF-8 locale. Both NIFs now run with the "C" locale on their own thread (`uselocale`), leaving the rest of the VM untouched. Diffs of git.git between v2.0.0 and v2.54.0 failed entirely before.
+
+- `GitAgent.pack_create/3` no longer holds up every other call to the same agent while a pack is built. It now runs in a separate process on its own repository handle and replies when done. Previously a clone or fetch of a large repository queued all other requests for that repository (web pages included) for the whole pack build, e.g. a `revision` call waited ~650ms during a 6.5k-object clone and ~2s during a large pack in tests.
+- `GitAgent.blame/3` runs the same way, outside the agent on its own repository handle. Blame time grows with history depth: on git.git (80k commits) blaming a 23-commit `README.md` took 3.6s and blocked the agent for all of it; files with long histories took minutes.
+- `GitAgent.graph_ahead_behind/3` and `GitAgent.odb_writepack_commit/3` run the same way. Counting ahead/behind across 44k commits of git.git blocked the agent for 680ms; indexing a pushed 53MB pack in `odb_writepack_commit` blocked it for 6s.
+
 ## [0.11.0] - 2026-10-05
 
 ### Changed

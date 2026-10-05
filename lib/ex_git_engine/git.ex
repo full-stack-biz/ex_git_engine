@@ -274,6 +274,7 @@ defmodule ExGitEngine.Git do
   @type tree_entry :: {integer, :blob | :tree, oid, binary}
 
   @type diff :: reference
+  @type patch :: reference
   @type diff_format :: :patch | :patch_header | :raw | :name_only | :name_status
   @type diff_delta :: {diff_file, diff_file, non_neg_integer, non_neg_integer}
   @type diff_file :: {oid, binary, integer, non_neg_integer}
@@ -1060,6 +1061,40 @@ defmodule ExGitEngine.Git do
   """
   @spec diff_format(diff, diff_format) :: {:ok, binary} | {:error, term}
   def diff_format(_diff, _format \\ :patch) do
+    :erlang.nif_error(:not_loaded)
+  end
+
+  @doc """
+  Returns `{:ok, total, files}`: the number of files in the given `diff` and
+  `{index, status_char, old_path, new_path}` for files `offset` up to
+  `offset + limit - 1`. Reads no file contents.
+  """
+  @spec diff_files(diff, non_neg_integer, non_neg_integer) ::
+          {:ok, non_neg_integer, [{non_neg_integer, char, binary, binary}]}
+  def diff_files(_diff, _offset, _limit) do
+    :erlang.nif_error(:not_loaded)
+  end
+
+  @doc """
+  Computes the diff of the file at `index` and returns `{:ok, patch, outline}`,
+  `outline` being `{status_char, old_path, new_path, binary?, hunks}` with each
+  hunk `{old_start, old_lines, new_start, new_lines, origins}`, one origin byte
+  per line. Returns `{:error, nil}` when `index` is out of range.
+  """
+  @spec diff_patch(diff, non_neg_integer) ::
+          {:ok, patch,
+           {char, binary, binary, boolean, [{integer, integer, integer, integer, binary}]}}
+          | {:error, term}
+  def diff_patch(_diff, _index) do
+    :erlang.nif_error(:not_loaded)
+  end
+
+  @doc """
+  Returns the text of `patch` as a list of binaries: its file header and hunks
+  `first` to `last` (0-based, inclusive; `last = -1` means to the end).
+  """
+  @spec patch_text(patch, non_neg_integer, integer) :: {:ok, [binary]} | {:error, term}
+  def patch_text(_patch, _first, _last) do
     :erlang.nif_error(:not_loaded)
   end
 

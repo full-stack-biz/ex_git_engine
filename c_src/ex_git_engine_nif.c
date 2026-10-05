@@ -35,6 +35,7 @@ ErlNifResourceType *git_engine_ref_iter_type;
 ErlNifResourceType *git_engine_object_type;
 ErlNifResourceType *git_engine_revwalk_type;
 ErlNifResourceType *git_engine_diff_type;
+ErlNifResourceType *git_engine_patch_type;
 ErlNifResourceType *git_engine_index_type;
 ErlNifResourceType *git_engine_config_type;
 ErlNifResourceType *git_engine_pack_type;
@@ -89,6 +90,12 @@ static int load(ErlNifEnv *env, void **priv, ERL_NIF_TERM load_info)
 	if (git_engine_diff_type == NULL)
 		return -1;
 
+	git_engine_patch_type = enif_open_resource_type(env, NULL,
+		"patch_type", git_engine_patch_free, ERL_NIF_RT_CREATE, NULL);
+
+	if (git_engine_patch_type == NULL)
+		return -1;
+
 	git_engine_index_type = enif_open_resource_type(env, NULL,
 		"index_type", git_engine_index_free, ERL_NIF_RT_CREATE, NULL);
 
@@ -137,6 +144,7 @@ static int load(ErlNifEnv *env, void **priv, ERL_NIF_TERM load_info)
 	atoms.format_name_only = enif_make_atom(env, "name_only");
 	atoms.format_name_status = enif_make_atom(env, "name_status");
 	atoms.diff_opts_pathspec = enif_make_atom(env, "pathspec");
+	atoms.diff_opts_exact_paths = enif_make_atom(env, "exact_paths");
 	atoms.diff_opts_context_lines = enif_make_atom(env, "context_lines");
 	atoms.diff_opts_interhunk_lines = enif_make_atom(env, "interhunk_lines");
 	atoms.undefined = enif_make_atom(env, "undefined");
@@ -388,6 +396,9 @@ static ErlNifFunc git_engine_funcs[] =
 	{"diff_delta_count", 1, git_engine_diff_delta_count, 0},
 	{"diff_deltas", 1, git_engine_diff_deltas, ERL_NIF_DIRTY_JOB_CPU_BOUND},
 	{"diff_format", 2, git_engine_diff_format, ERL_NIF_DIRTY_JOB_CPU_BOUND},
+	{"diff_files", 3, git_engine_diff_files, 0},
+	{"diff_patch", 2, git_engine_diff_patch, ERL_NIF_DIRTY_JOB_CPU_BOUND},
+	{"patch_text", 3, git_engine_patch_text, 0},
 	{"index_new", 0, git_engine_index_new, 0},
 	{"index_read_tree", 2, git_engine_index_read_tree, 0},
 	{"index_write", 1, git_engine_index_write, 0},

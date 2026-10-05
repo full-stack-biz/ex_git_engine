@@ -147,6 +147,18 @@ defmodule ExGitEngine do
     end
   end
 
+  defmodule GitPatch do
+    @moduledoc """
+    Represents one file's computed diff, from `ExGitEngine.GitAgent.diff_patch/4`.
+    """
+    defstruct [:__ref__]
+    @type t :: %__MODULE__{__ref__: Git.patch()}
+
+    defimpl Inspect do
+      def inspect(patch, _opts), do: "<GitPatch:#{inspect(patch.__ref__)}>"
+    end
+  end
+
   defmodule GitOdb do
     @moduledoc """
     Represents a Git ODB.

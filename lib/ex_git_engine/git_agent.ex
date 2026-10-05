@@ -240,13 +240,15 @@ defmodule ExGitEngine.GitAgent do
     GitIndex,
     GitIndexEntry,
     GitOdb,
+    GitPatch,
     GitRef,
     GitRepo,
     GitStream,
     GitTag,
     GitTree,
     GitTreeEntry,
-    GitWritePack
+    GitWritePack,
+    JobLimiter
   }
 
   @behaviour ExGitEngine.Cache
@@ -265,6 +267,8 @@ defmodule ExGitEngine.GitAgent do
                   )
 
   @exec_opts [:timeout]
+  @diff_files_page 1_000
+  @diff_files_max_page 5_000
 
   @doc """
   Starts a Git agent linked to the current process for the repository at the given `path`.
@@ -689,6 +693,93 @@ defmodule ExGitEngine.GitAgent do
   end
 
   @doc """
+  Returns a page of the files in `diff`, without reading their contents.
+
+  This is the first of three levels for paging through a large diff, following
+  libgit2: files are addressed by index, a file's text diff is only computed
+  when asked for (`diff_patch/4`), and its hunks are addressed by index
+  (`diff_patch_text/4`):
+
+      {:ok, diff} = GitAgent.diff(agent, base, head)
+      {:ok, %{total: total, files: files}} = GitAgent.diff_files(agent, diff, offset: 0, limit: 100)
+      {:ok, %{patch: patch, hunks: hunks}} = GitAgent.diff_patch(agent, diff, 42)
+      {:ok, text} = GitAgent.diff_patch_text(agent, patch, hunks: 0..9)
+
+  Indexes are positions in this `diff`. A diff of the same trees with the same
+  options has the same order, so an index stays valid for it.
+
+  Options: `:offset` (default `0`) and `:limit` (default `#{@diff_files_page}`, at
+  most `#{@diff_files_max_page}`; larger pages raise `ArgumentError`: the VM
+  collects a NIF result that big on a dirty scheduler, where it can wait behind
+  long jobs). Returns `%{total: n, files: [%{index:, from:, to:, status:}]}`,
+  where `:status` is one of `:added`, `:deleted`, `:modified`, `:renamed`,
+  `:copied`, `:typechange`.
+  """
+  @spec diff_files(agent, GitDiff.t(), keyword) ::
+          {:ok, %{total: non_neg_integer, files: [map]}} | {:error, term}
+  def diff_files(agent, diff, opts \\ []) do
+    {offset, opts} = Keyword.pop(opts, :offset, 0)
+    {limit, opts} = Keyword.pop(opts, :limit, @diff_files_page)
+
+    if limit > @diff_files_max_page,
+      do:
+        raise(ArgumentError, "diff_files limit is at most #{@diff_files_max_page}, got #{limit}")
+
+    exec(agent, {:diff_files, diff, offset, limit}, opts)
+  end
+
+  @doc """
+  Returns the outline of file `index` in `diff` (see `diff_files/3`): its text
+  diff without the line content.
+
+  The map has `:index`, `:from`, `:to`, `:status`, `:binary`, `:additions`,
+  `:deletions`, `:hunks` and `:patch`. Each hunk has `:old_start`,
+  `:old_lines`, `:new_start`, `:new_lines` and `:origins`: one byte per line
+  (`" "`, `"+"`, `"-"`, or `"="`/`">"`/`"<"` for a missing newline at end of
+  file), enough to size the rendered file and to choose hunk ranges.
+  `:patch` is the computed diff, for `diff_patch_text/3` to read pages of
+  hunks from without diffing the file again. Returns `{:error, :not_found}`
+  when there is no file `index`.
+  """
+  @spec diff_patch(agent, GitDiff.t(), non_neg_integer, keyword) ::
+          {:ok, map} | {:error, :not_found | term}
+  def diff_patch(agent, diff, index, opts \\ []),
+    do: exec(agent, {:diff_patch, diff, index}, opts)
+
+  @doc """
+  Returns the text of a `patch` from `diff_patch/4`, in `git diff` format: the
+  file header and its hunks.
+
+  Option `:hunks` is a range of hunk indexes (0-based) to include, default all.
+  The file header is always included, so each page parses as a patch on its
+  own. Only the requested hunks are read.
+  """
+  @spec diff_patch_text(agent, GitPatch.t(), keyword) :: {:ok, binary} | {:error, term}
+  def diff_patch_text(agent, %GitPatch{} = patch, opts \\ []) do
+    {first..last//1, opts} = Keyword.pop(opts, :hunks, 0..-1//1)
+    exec(agent, {:diff_patch_text, patch, first, last}, opts)
+  end
+
+  @doc """
+  Returns the patch text of a single file `path` between `obj1` and `obj2`.
+
+  For callers that know the path but hold no `diff`. `path` is matched exactly
+  (no globbing), so `"a*.txt"` is only that file. The result is the same as
+  that file's part of `diff_format/3` on the whole diff, and is empty when the
+  file did not change. To page through a large diff, use `diff_files/3`.
+  """
+  @spec diff_file(
+          agent,
+          git_revision | GitTree.t(),
+          git_revision | GitTree.t(),
+          Path.t(),
+          keyword
+        ) ::
+          {:ok, binary} | {:error, term}
+  def diff_file(agent, obj1, obj2, path, opts \\ []),
+    do: exec(agent, {:diff_file, obj1, obj2, path}, opts)
+
+  @doc """
   Returns the stats of the given `diff`.
   """
   @spec diff_stats(agent, GitDiff.t(), keyword) :: {:ok, map} | {:error, term}
@@ -737,7 +828,7 @@ defmodule ExGitEngine.GitAgent do
     case Git.repository_open(path) do
       {:ok, handle} ->
         config = Map.merge(@default_config, Map.new(opts))
-        config = Map.put(config, :mon, %{})
+        config = config |> Map.put(:mon, %{}) |> Map.put(:path, path)
         config = Map.put_new_lazy(config, :cache, fn -> init_cache(path, []) end)
         {:ok, {handle, config}, config.idle_timeout}
 
@@ -789,6 +880,17 @@ defmodule ExGitEngine.GitAgent do
       {:error, reason} ->
         {:reply, {:error, reason}, state, config.idle_timeout}
     end
+  end
+
+  def handle_call(op, from, {_handle, config} = state)
+      when elem(op, 0) in [
+             :pack,
+             :blame,
+             :graph_ahead_behind,
+             :odb_writepack_commit
+           ] do
+    JobLimiter.submit(from, fn -> call_off_agent(op, config.path) end)
+    {:noreply, state, config.idle_timeout}
   end
 
   def handle_call({:stream_next, op, stream, chunk_size}, {pid, _tag}, {handle, config} = _state) do
@@ -855,6 +957,45 @@ defmodule ExGitEngine.GitAgent do
   end
 
   defp pop_exec_opts(opts), do: Enum.split_with(opts, fn {k, _v} -> k in @exec_opts end)
+
+  defp call_off_agent({:odb_writepack_commit, _, _} = op, _path), do: call(nil, op)
+
+  defp call_off_agent(op, path),
+    do: with({:ok, handle} <- Git.repository_open(path), do: call(handle, op))
+
+  defp outline_file({status, from, to, binary, hunks}) do
+    hunks =
+      Enum.map(hunks, fn {old_start, old_lines, new_start, new_lines, origins} ->
+        %{
+          old_start: old_start,
+          old_lines: old_lines,
+          new_start: new_start,
+          new_lines: new_lines,
+          origins: origins
+        }
+      end)
+
+    origins = Enum.map_join(hunks, & &1.origins)
+
+    %{
+      from: from,
+      to: to,
+      status: diff_status(status),
+      binary: binary,
+      additions: count_bytes(origins, ?+),
+      deletions: count_bytes(origins, ?-),
+      hunks: hunks
+    }
+  end
+
+  defp count_bytes(bin, byte), do: for(<<^byte <- bin>>, reduce: 0, do: (n -> n + 1))
+
+  defp diff_status(?A), do: :added
+  defp diff_status(?D), do: :deleted
+  defp diff_status(?R), do: :renamed
+  defp diff_status(?C), do: :copied
+  defp diff_status(?T), do: :typechange
+  defp diff_status(_), do: :modified
 
   defp call(handle, :empty?) do
     {:ok, Git.repository_empty?(handle)}
@@ -1132,6 +1273,44 @@ defmodule ExGitEngine.GitAgent do
 
   defp call(_handle, {:diff_format, %GitDiff{__ref__: diff}, format}),
     do: Git.diff_format(diff, format)
+
+  defp call(_handle, {:diff_files, %GitDiff{__ref__: diff}, offset, limit}) do
+    {:ok, total, files} = Git.diff_files(diff, offset, limit)
+
+    {:ok,
+     %{
+       total: total,
+       files:
+         Enum.map(files, fn {index, status, from, to} ->
+           %{index: index, from: from, to: to, status: diff_status(status)}
+         end)
+     }}
+  end
+
+  defp call(_handle, {:diff_patch, %GitDiff{__ref__: diff}, index}) do
+    case Git.diff_patch(diff, index) do
+      {:ok, patch, file} ->
+        {:ok,
+         file |> outline_file() |> Map.merge(%{index: index, patch: %GitPatch{__ref__: patch}})}
+
+      {:error, nil} ->
+        {:error, :not_found}
+
+      error ->
+        error
+    end
+  end
+
+  defp call(_handle, {:diff_patch_text, %GitPatch{__ref__: patch}, first, last}) do
+    with {:ok, chunks} <- Git.patch_text(patch, first, last),
+         do: {:ok, IO.iodata_to_binary(chunks)}
+  end
+
+  defp call(handle, {:diff_file, obj1, obj2, path}) do
+    with {:ok, %GitDiff{__ref__: diff}} <-
+           fetch_diff(obj1, obj2, handle, pathspec: [path], exact_paths: true),
+         do: Git.diff_format(diff, :patch)
+  end
 
   defp call(_handle, {:diff_deltas, %GitDiff{__ref__: diff}}) do
     case Git.diff_deltas(diff) do

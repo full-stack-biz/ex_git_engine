@@ -527,6 +527,146 @@ defmodule ExGitEngine.GitAgentTest do
       assert is_list(deltas)
       assert deltas != []
     end
+
+    test "diff_format handles non-UTF-8 lines under a diff driver", %{agent: agent, path: path} do
+      cmd = fn args -> System.cmd("git", ["-C", path | args], stderr_to_stdout: true) end
+      File.write!(Path.join(path, ".gitattributes"), "*.c diff=cpp\n")
+
+      body = fn x ->
+        "int caf\xE9(void)\n{\n" <> Enum.map_join(1..10, "", &"  a#{&1}();\n") <> "  #{x}();\n}\n"
+      end
+
+      File.write!(Path.join(path, "a.c"), body.("old"))
+      cmd.(["add", "."])
+      cmd.(["commit", "-qm", "latin1"])
+      File.write!(Path.join(path, "a.c"), body.("new"))
+      cmd.(["commit", "-qam", "change"])
+
+      {:ok, {old, _}} = GitAgent.revision(agent, "HEAD~1")
+      {:ok, {new, _}} = GitAgent.revision(agent, "HEAD")
+      {:ok, diff} = GitAgent.diff(agent, old, new)
+
+      assert {:ok, patch} = GitAgent.diff_format(agent, diff, patch: :patch)
+      assert patch =~ "+  new();"
+    end
+  end
+
+  describe "paged diff access: diff_files/3, diff_patch/4, diff_patch_text/4, diff_file/5" do
+    setup %{agent: agent, path: path} do
+      cmd = fn args -> System.cmd("git", ["-C", path | args], stderr_to_stdout: true) end
+      lines = Enum.map_join(1..20, "", &"line #{&1}\n")
+      File.write!(Path.join(path, "keep.txt"), lines)
+      File.write!(Path.join(path, "gone.txt"), "bye\n")
+      File.write!(Path.join(path, "img.bin"), <<0, 1, 2, 3>>)
+      cmd.(["add", "."])
+      cmd.(["commit", "-qm", "base"])
+
+      changed =
+        lines
+        |> String.replace("line 2\n", "two\n")
+        |> String.replace("line 10\n", "ten\nten b\n")
+        |> String.replace("line 19\n", "nineteen\n")
+
+      File.write!(Path.join(path, "keep.txt"), changed)
+      File.rm!(Path.join(path, "gone.txt"))
+      File.write!(Path.join(path, "new.txt"), "hello\n")
+      File.write!(Path.join(path, "img.bin"), <<0, 1, 2, 4>>)
+      cmd.(["add", "-A"])
+      cmd.(["commit", "-qm", "change"])
+
+      {:ok, {old, _}} = GitAgent.revision(agent, "HEAD~1")
+      {:ok, {new, _}} = GitAgent.revision(agent, "HEAD")
+      {:ok, diff} = GitAgent.diff(agent, old, new)
+      %{diff: diff, old: old, new: new, cmd: cmd}
+    end
+
+    test "diff_files pages file metadata by index", %{agent: agent, diff: diff} do
+      assert {:ok, %{total: 4, files: files}} = GitAgent.diff_files(agent, diff)
+
+      assert [
+               %{index: 0, from: "gone.txt", to: "gone.txt", status: :deleted},
+               %{index: 1, from: "img.bin", status: :modified},
+               %{index: 2, from: "keep.txt", status: :modified},
+               %{index: 3, from: "new.txt", to: "new.txt", status: :added}
+             ] = files
+
+      assert {:ok, %{total: 4, files: [%{index: 1}, %{index: 2}]}} =
+               GitAgent.diff_files(agent, diff, offset: 1, limit: 2)
+
+      assert {:ok, %{total: 4, files: []}} = GitAgent.diff_files(agent, diff, offset: 9)
+
+      assert {:ok, %{files: [%{index: 2}, %{index: 3}]}} =
+               GitAgent.diff_files(agent, diff, offset: 2)
+    end
+
+    test "diff_patch outlines one file: counts, hunk ranges, one origin byte per line",
+         %{agent: agent, diff: diff} do
+      assert {:ok,
+              %{
+                index: 2,
+                from: "keep.txt",
+                status: :modified,
+                binary: false,
+                additions: 4,
+                deletions: 3,
+                hunks: [
+                  %{old_start: 1, old_lines: 5, new_start: 1, new_lines: 5, origins: " -+   "},
+                  %{old_start: 7, old_lines: 7, new_start: 7, new_lines: 8, origins: "   -++   "},
+                  %{old_start: 16, old_lines: 5, new_start: 17, new_lines: 5, origins: "   -+ "}
+                ]
+              }} = GitAgent.diff_patch(agent, diff, 2)
+
+      assert {:ok, %{binary: true, hunks: []}} = GitAgent.diff_patch(agent, diff, 1)
+      assert {:error, :not_found} = GitAgent.diff_patch(agent, diff, 4)
+    end
+
+    test "diff_patch_text gives a file's patch, or only a range of its hunks",
+         %{agent: agent, diff: diff, old: old, new: new} do
+      {:ok, whole} = GitAgent.diff_file(agent, old, new, "keep.txt")
+      {:ok, %{patch: %ExGitEngine.GitPatch{} = patch}} = GitAgent.diff_patch(agent, diff, 2)
+      assert {:ok, ^whole} = GitAgent.diff_patch_text(agent, patch)
+
+      [header | hunks] = String.split(whole, ~r/^(?=@@)/m)
+      assert {:ok, middle} = GitAgent.diff_patch_text(agent, patch, hunks: 1..1)
+      assert middle == header <> Enum.at(hunks, 1)
+
+      assert {:ok, last_two} = GitAgent.diff_patch_text(agent, patch, hunks: 1..2)
+      assert last_two == header <> Enum.at(hunks, 1) <> Enum.at(hunks, 2)
+    end
+
+    test "diff_file returns each file's part of the whole patch",
+         %{agent: agent, diff: diff, old: old, new: new} do
+      {:ok, whole} = GitAgent.diff_format(agent, diff, patch: :patch)
+
+      files =
+        for path <- ["gone.txt", "img.bin", "keep.txt", "new.txt"] do
+          {:ok, text} = GitAgent.diff_file(agent, old, new, path)
+          text
+        end
+
+      assert Enum.join(files) == whole
+      assert {:ok, ""} = GitAgent.diff_file(agent, old, new, "missing.txt")
+    end
+
+    test "diff_file matches the path exactly, not as a glob",
+         %{agent: agent, path: path, new: base, cmd: cmd} do
+      File.write!(Path.join(path, "a*.txt"), "star\n")
+      File.write!(Path.join(path, "ab.txt"), "plain\n")
+      cmd.(["add", "."])
+      cmd.(["commit", "-qm", "glob"])
+      {:ok, {head, _}} = GitAgent.revision(agent, "HEAD")
+
+      assert {:ok, patch} = GitAgent.diff_file(agent, base, head, "a*.txt")
+      assert patch =~ "+star"
+      refute patch =~ "ab.txt"
+    end
+
+    test "diff honours context_lines", %{agent: agent, old: old, new: new} do
+      {:ok, diff} = GitAgent.diff(agent, old, new, context_lines: 1)
+
+      assert {:ok, %{hunks: [%{origins: " -+ "}, %{origins: " -++ "}, %{origins: " -+ "}]}} =
+               GitAgent.diff_patch(agent, diff, 2)
+    end
   end
 
   describe "branches/2 and branch/3 with :with option" do
