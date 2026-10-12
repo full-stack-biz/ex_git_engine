@@ -70,6 +70,7 @@ git_engine_object_lookup(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
     git_engine_repository *repo;
     ErlNifBinary bin;
     git_oid id;
+    git_object *found;
     git_engine_object *obj;
     ERL_NIF_TERM term_obj;
 
@@ -84,14 +85,17 @@ git_engine_object_lookup(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
     git_oid_fromraw(&id, bin.data);
 
-    obj = enif_alloc_resource(git_engine_object_type, sizeof(git_engine_object));
-    if (!obj)
-        return git_engine_oom(env);
-
-    error = git_object_lookup(&obj->obj, repo->repo, &id, GIT_OBJ_ANY);
+    error = git_object_lookup(&found, repo->repo, &id, GIT_OBJ_ANY);
     if (error < 0)
         return git_engine_error_struct(env, error);
 
+    obj = enif_alloc_resource(git_engine_object_type, sizeof(git_engine_object));
+    if (!obj) {
+        git_object_free(found);
+        return git_engine_oom(env);
+    }
+
+    obj->obj = found;
     term_obj = enif_make_resource(env, obj);
     enif_release_resource(obj);
 
@@ -99,6 +103,37 @@ git_engine_object_lookup(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
     enif_keep_resource(repo);
 
     return enif_make_tuple3(env, atoms.ok, git_engine_object_type2atom(git_object_type(obj->obj)), term_obj);
+}
+
+ERL_NIF_TERM
+git_engine_object_size(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    int error;
+    git_engine_repository *repo;
+    ErlNifBinary bin;
+    git_oid id;
+    git_odb *odb;
+    size_t size;
+    git_object_t type;
+
+    if (!enif_get_resource(env, argv[0], git_engine_repository_type, (void **) &repo))
+        return enif_make_badarg(env);
+
+    if (!enif_inspect_binary(env, argv[1], &bin) || bin.size != GIT_OID_RAWSZ)
+        return enif_make_badarg(env);
+
+    git_oid_fromraw(&id, bin.data);
+
+    error = git_repository_odb(&odb, repo->repo);
+    if (error < 0)
+        return git_engine_error_struct(env, error);
+
+    error = git_odb_read_header(&size, &type, odb, &id);
+    git_odb_free(odb);
+    if (error < 0)
+        return git_engine_error_struct(env, error);
+
+    return enif_make_tuple3(env, atoms.ok, git_engine_object_type2atom(type), enif_make_uint64(env, size));
 }
 
 ERL_NIF_TERM

@@ -27,6 +27,7 @@ typedef struct {
 	ERL_NIF_TERM format_name_only;
 	ERL_NIF_TERM format_name_status;
 	ERL_NIF_TERM diff_opts_pathspec;
+	ERL_NIF_TERM diff_opts_exact_paths;
 	ERL_NIF_TERM diff_opts_context_lines;
 	ERL_NIF_TERM diff_opts_interhunk_lines;
 	ERL_NIF_TERM undefined;

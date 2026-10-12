@@ -14,6 +14,7 @@ typedef struct {
 
 ERL_NIF_TERM git_engine_object_repository(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 ERL_NIF_TERM git_engine_object_lookup(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
+ERL_NIF_TERM git_engine_object_size(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 ERL_NIF_TERM git_engine_object_id(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 ERL_NIF_TERM git_engine_object_zlib_inflate(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 
