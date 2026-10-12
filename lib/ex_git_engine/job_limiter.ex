@@ -40,7 +40,8 @@ defmodule ExGitEngine.JobLimiter do
 
   @doc """
   Runs `fun` once a slot is free and returns its result. A job that raises
-  returns `{:error, exception}`; `{:error, :busy}` means the queue is full.
+  returns `{:error, exception}`, one that throws or exits `{:error, {kind, reason}}`;
+  `{:error, :busy}` means the queue is full.
   """
   @spec run(server, (-> result), timeout) :: result | {:error, :busy | term} when result: term
   def run(server \\ __MODULE__, fun, timeout \\ :infinity),
@@ -127,7 +128,8 @@ defmodule ExGitEngine.JobLimiter do
 
   defp safely(fun) do
     fun.()
-  rescue
-    e in [RuntimeError, ErlangError, MatchError, CaseClauseError, ArgumentError] -> {:error, e}
+  catch
+    :error, e -> {:error, Exception.normalize(:error, e, __STACKTRACE__)}
+    kind, reason -> {:error, {kind, reason}}
   end
 end

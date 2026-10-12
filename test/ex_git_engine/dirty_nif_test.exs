@@ -8,7 +8,7 @@ defmodule ExGitEngine.DirtyNifTest do
   """
   use ExUnit.Case, async: false
 
-  alias ExGitEngine.{Git, GitAgent, GitDiff}
+  alias ExGitEngine.{Git, GitAgent, GitDiff, WireProtocol}
   alias ExGitEngine.WireProtocol.ReceivePack
 
   @files 400
@@ -119,6 +119,30 @@ defmodule ExGitEngine.DirtyNifTest do
            "listing took #{div(files_us, 1000)}ms vs #{div(format_us, 1000)}ms for all content"
   end
 
+  test "looking up a large blob leaves the normal scheduler free" do
+    path = Path.join(System.tmp_dir(), "ex_git_engine-bigblob-#{:erlang.unique_integer()}")
+    System.cmd("git", ["init", "-q", "-b", "main", path])
+    on_exit(fn -> File.rm_rf!(path) end)
+    cmd = fn args -> System.cmd("git", ["-C", path | args], stderr_to_stdout: true) end
+    cmd.(["config", "user.email", "t@e"])
+    cmd.(["config", "user.name", "T"])
+
+    File.write!(
+      Path.join(path, "big.txt"),
+      Enum.map_join(1..400_000, "", &"line #{&1} #{:erlang.phash2(&1)} filler text\n")
+    )
+
+    cmd.(["add", "."])
+    cmd.(["commit", "-qm", "big"])
+    cmd.(["gc", "-q"])
+    {oid, 0} = cmd.(["rev-parse", "main:big.txt"])
+
+    {:ok, agent} = GitAgent.start_link(path)
+    oid = Base.decode16!(String.trim(oid), case: :lower)
+
+    assert_not_blocking(fn -> GitAgent.object(agent, oid) end)
+  end
+
   test "pack_create leaves the normal scheduler free", %{agent: agent} = ctx do
     assert_not_blocking(fn -> GitAgent.pack_create(agent, [ctx.old.oid, ctx.new.oid]) end)
   end
@@ -154,6 +178,36 @@ defmodule ExGitEngine.DirtyNifTest do
              assert_agent_free(target, fn ->
                GitAgent.odb_writepack_commit(target, wp, progress)
              end)
+  end
+
+  test "a push waits for its pack to be indexed however long the JobLimiter queue holds it" do
+    source = deep_history_repo(10, 1)
+
+    {pack, 0} =
+      System.cmd("sh", ["-c", "echo main | git -C #{source} pack-objects --revs --stdout -q"])
+
+    {head, 0} = System.cmd("git", ["-C", source, "rev-parse", "main"])
+    {:ok, target} = GitAgent.start_link(bare_repo())
+
+    max_jobs = :sys.get_state(ExGitEngine.JobLimiter).max_jobs
+
+    blockers =
+      for _ <- 1..max_jobs,
+          do: Task.async(fn -> ExGitEngine.JobLimiter.run(fn -> Process.sleep(5_500) end) end)
+
+    Process.sleep(50)
+
+    zero = String.duplicate("0", 40)
+
+    body =
+      WireProtocol.pkt_line("#{zero} #{String.trim(head)} refs/heads/main\0report-status") <>
+        "0000" <> pack
+
+    service = WireProtocol.new(target, "git-receive-pack")
+    {_service, output} = WireProtocol.run(service, body, skip: 1)
+
+    assert IO.iodata_to_binary(output) =~ "ok refs/heads/main"
+    Task.await_many(blockers, 10_000)
   end
 
   test "blame does not hold up other calls to the same agent" do

@@ -367,6 +367,18 @@ defmodule ExGitEngine.GitAgentTest do
     end
   end
 
+  describe "object/2" do
+    test "a missing object is an error that holds no memory", %{agent: agent} do
+      missing = :binary.copy(<<1>>, 20)
+      binary = fn -> :erlang.garbage_collect(agent) && :erlang.memory(:binary) end
+
+      before = binary.()
+      for _ <- 1..100_000, do: {:error, _} = GitAgent.object(agent, missing)
+
+      assert binary.() - before < 5_000_000
+    end
+  end
+
   describe "blob_content/2 and blob_size/2" do
     test "returns file content", %{agent: agent} do
       {:ok, ref} = GitAgent.branch(agent, "main")

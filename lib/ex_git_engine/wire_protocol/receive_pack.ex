@@ -375,7 +375,7 @@ defmodule ExGitEngine.WireProtocol.ReceivePack do
   defp push_pack(_agent, _writepack, progress) when progress.received_bytes == 0, do: :ok
 
   defp push_pack(agent, writepack, progress) do
-    case GitAgent.odb_writepack_commit(agent, writepack, progress) do
+    case GitAgent.odb_writepack_commit(agent, writepack, progress, timeout: :infinity) do
       {:ok, _progress} ->
         :ok
 

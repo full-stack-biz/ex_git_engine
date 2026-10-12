@@ -997,6 +997,15 @@ defmodule ExGitEngine.GitAgent do
   defp diff_status(?T), do: :typechange
   defp diff_status(_), do: :modified
 
+  defp object_lookup(handle, oid) do
+    max = Application.get_env(:ex_git_engine, :normal_scheduler_object_size, 1_000_000)
+
+    case Git.object_size(handle, oid) do
+      {:ok, _type, size} when size > max -> Git.object_lookup_dirty(handle, oid)
+      _ -> Git.object_lookup(handle, oid)
+    end
+  end
+
   defp call(handle, :empty?) do
     {:ok, Git.repository_empty?(handle)}
   end
@@ -1150,7 +1159,7 @@ defmodule ExGitEngine.GitAgent do
     do: Git.odb_writepack_commit(writepack, progress)
 
   defp call(handle, {:object, oid}) do
-    case Git.object_lookup(handle, oid) do
+    case object_lookup(handle, oid) do
       {:ok, obj_type, obj} ->
         {:ok, resolve_object({obj, obj_type, oid})}
 
@@ -1689,7 +1698,7 @@ defmodule ExGitEngine.GitAgent do
   end
 
   defp lookup_object!(oid, handle) do
-    case Git.object_lookup(handle, oid) do
+    case object_lookup(handle, oid) do
       {:ok, obj_type, obj} ->
         resolve_object({obj, obj_type, oid})
 
@@ -1936,7 +1945,7 @@ defmodule ExGitEngine.GitAgent do
   defp fetch_target(%GitCommit{} = commit, :tree, handle), do: fetch_tree(commit, handle)
 
   defp fetch_target(%GitTreeEntry{oid: oid, type: type}, target, handle) do
-    case Git.object_lookup(handle, oid) do
+    case object_lookup(handle, oid) do
       {:ok, ^type, obj} ->
         if target == :undefined,
           do: {:ok, resolve_object({obj, type, oid})},

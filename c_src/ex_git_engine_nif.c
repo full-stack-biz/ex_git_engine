@@ -356,6 +356,8 @@ static ErlNifFunc git_engine_funcs[] =
 	{"oid_parse", 1, git_engine_oid_parse, 0},
 	{"object_repository", 1, git_engine_object_repository, 0},
 	{"object_lookup", 2, git_engine_object_lookup, 0},
+	{"object_lookup_dirty", 2, git_engine_object_lookup, ERL_NIF_DIRTY_JOB_IO_BOUND},
+	{"object_size", 2, git_engine_object_size, 0},
 	{"object_id", 1, git_engine_object_id, 0},
 	{"object_zlib_inflate", 2, git_engine_object_zlib_inflate, 0},
 	{"commit_parent", 2, git_engine_commit_parent, 0},

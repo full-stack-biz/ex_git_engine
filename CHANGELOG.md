@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.1] - 2026-10-12
+
+### Added
+
+- `Git.object_size/2`: an object's type and size from its header, without inflating it.
+- `Git.object_lookup_dirty/2`: `object_lookup/2` on a dirty IO scheduler.
+
+### Fixed
+
+- Looking up a large object no longer holds a normal scheduler while libgit2 inflates it and resolves its delta chain. `GitAgent` reads the object's size from its header first and looks up objects above `config :ex_git_engine, normal_scheduler_object_size: n` (default 1MB) on a dirty IO scheduler. Looking up a 17MB packed blob held its scheduler for 53–170ms.
+- A push whose pack waits in the `JobLimiter` queue, or takes longer than 5s to index, no longer fails: `ReceivePack` waits for `odb_writepack_commit` without a timeout, as `UploadPack` does for `pack_create`.
+- A `JobLimiter` job that raises any exception, throws or exits now answers its caller with `{:error, exception}` or `{:error, {kind, reason}}`. Before, only five exception types were caught; any other ended the job without a reply, and a caller waiting with `timeout: :infinity` waited forever.
+- `WireProtocol.run/3` no longer raises `MatchError` when called without the `:skip` option.
+- `Git.object_lookup/2` no longer leaks its resource when the object is missing (about 128 bytes per failed lookup).
+
 ## [0.12.0] - 2026-10-05
 
 ### Added

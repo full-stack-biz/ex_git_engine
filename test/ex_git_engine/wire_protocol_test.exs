@@ -159,6 +159,9 @@ defmodule ExGitEngine.WireProtocolTest do
       # "0000" is PKT-LINE flush — upload_req treats it as empty request → done
       {:halt, new_handle, _output} = WireProtocol.next(handle, "0000")
       assert new_handle.state == :done
+
+      handle = %{handle | state: :upload_req}
+      assert {%UploadPack{state: :done}, _output} = WireProtocol.run(handle, "0000")
     end
   end
 end

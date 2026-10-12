@@ -25,6 +25,17 @@ defmodule ExGitEngine.JobLimiterTest do
     assert :counters.get(running, 2) == 2
   end
 
+  test "answers the caller when a job raises, throws or exits" do
+    limiter = start_supervised!({JobLimiter, name: nil, max_jobs: 1})
+
+    assert {:error, %KeyError{}} =
+             JobLimiter.run(limiter, fn -> raise KeyError, key: :x end, 1_000)
+
+    assert {:error, {:throw, :t}} = JobLimiter.run(limiter, fn -> throw(:t) end, 1_000)
+    assert {:error, {:exit, :e}} = JobLimiter.run(limiter, fn -> exit(:e) end, 1_000)
+    assert {:error, %RuntimeError{}} = JobLimiter.run(limiter, fn -> raise "r" end, 1_000)
+  end
+
   test "drops a queued job whose caller is gone" do
     limiter = start_supervised!({JobLimiter, name: nil, max_jobs: 1})
     test = self()

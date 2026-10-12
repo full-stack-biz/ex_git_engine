@@ -693,6 +693,24 @@ defmodule ExGitEngine.Git do
   end
 
   @doc """
+  Same as `object_lookup/2`, on a dirty IO scheduler: for objects large enough
+  that inflating them would hold a normal scheduler.
+  """
+  @spec object_lookup_dirty(repo, oid) :: {:ok, obj_type, obj} | {:error, term}
+  def object_lookup_dirty(_repo, _oid) do
+    :erlang.nif_error(:not_loaded)
+  end
+
+  @doc """
+  Returns the type and size of the object with the given `oid` from its header,
+  without inflating it.
+  """
+  @spec object_size(repo, oid) :: {:ok, obj_type, non_neg_integer} | {:error, term}
+  def object_size(_repo, _oid) do
+    :erlang.nif_error(:not_loaded)
+  end
+
+  @doc """
   Returns the OID for the given `obj`.
   """
   @spec object_id(obj) :: {:ok, oid} | {:error, term}

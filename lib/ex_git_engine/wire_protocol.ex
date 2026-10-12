@@ -256,7 +256,7 @@ defmodule ExGitEngine.WireProtocol do
   #
 
   defp exec_run(service, lines, opts) do
-    {service, _skip} =
+    service =
       if skip = Keyword.get(opts, :skip),
         do: exec_skip(service, skip),
         else: service
@@ -309,11 +309,8 @@ defmodule ExGitEngine.WireProtocol do
     if done?, do: {service, acc ++ out}, else: exec_all(service, [], acc ++ out)
   end
 
-  defp exec_skip(service, count) when count > 0 do
-    Enum.reduce(1..count, {service, []}, fn _i, {service, states} ->
-      {skip(service), [service.state | states]}
-    end)
-  end
+  defp exec_skip(service, count) when count > 0,
+    do: Enum.reduce(1..count, service, fn _i, service -> skip(service) end)
 
   defp exec_impl("git-upload-pack"), do: ExGitEngine.WireProtocol.UploadPack
   defp exec_impl("git-receive-pack"), do: ExGitEngine.WireProtocol.ReceivePack
