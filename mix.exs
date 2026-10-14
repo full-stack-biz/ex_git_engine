@@ -4,7 +4,7 @@ defmodule ExGitEngine.Mixfile do
   def project do
     [
       app: :ex_git_engine,
-      version: "0.12.1",
+      version: "0.12.2",
       build_path: "_build",
       config_path: "config/config.exs",
       deps_path: "deps",
@@ -60,7 +60,7 @@ defmodule ExGitEngine.Mixfile do
     [
       {:reach, "~> 2.0", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
-      {:vibe_kit, "~> 0.1"},
+      {:vibe_kit, "~> 0.1", only: [:dev, :test], runtime: false},
       {:elixir_make, "~> 0.6"},
       {:stream_split, "~> 0.1"},
       {:telemetry, "~> 1.1"},
