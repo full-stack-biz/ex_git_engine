@@ -23,6 +23,7 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
     wants: [],
     haves: [],
     pending_wants: [],
+    shallow_pack: nil,
     pkt_rest: ""
   ]
 
@@ -35,6 +36,7 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
           wants: [Git.oid()],
           haves: [Git.oid()],
           pending_wants: [term],
+          shallow_pack: [Git.oid()] | nil,
           pkt_rest: binary
         }
 
@@ -61,8 +63,10 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
   end
 
   def next(%__MODULE__{state: :upload_req} = handle, lines) do
-    {wants, lines} = Enum.split_while(lines, &obj_match?(&1, :want))
-    {_shallows, lines} = Enum.split_while(lines, &obj_match?(&1, :shallow))
+    # upload-request = want-list *shallow-line *1depth-request flush-pkt
+    {wants, lines} =
+      Enum.split_while(lines, &(obj_match?(&1, :want) or obj_match?(&1, :shallow) or deepen?(&1)))
+
     wants = handle.pending_wants ++ wants
 
     case lines do
@@ -105,6 +109,12 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
     {%{handle | haves: haves}, lines, []}
   end
 
+  def next(%__MODULE__{state: :pack, shallow_pack: commits} = handle, []) when is_list(commits) do
+    # ponytail: haves are not subtracted, so a deepening fetch gets commits it already has
+    {:ok, pack} = GitAgent.pack_commits(handle.agent, commits, timeout: :infinity)
+    {%{handle | state: :done}, [], pack_output(:nak, pack, handle.caps)}
+  end
+
   def next(%__MODULE__{state: :pack} = handle, []) do
     Logger.debug(
       "UPLOAD_PACK: pack state with empty input, haves=#{length(handle.haves)}, wants=#{length(handle.wants)}"
@@ -142,7 +152,10 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
     {handle, [], []}
   end
 
-  defp upload_req(%__MODULE__{advertised_caps: advertised_caps} = handle, wants, lines) do
+  defp upload_req(%__MODULE__{advertised_caps: advertised_caps} = handle, req, lines) do
+    {wants, req} = Enum.split_with(req, &obj_match?(&1, :want))
+    client_shallows = req |> Enum.filter(&obj_match?(&1, :shallow)) |> parse_cmds()
+    depth = Enum.find_value(req, fn line -> deepen?(line) && elem(line, 1) end)
     {caps, wants} = parse_caps(wants)
 
     Logger.debug(
@@ -157,8 +170,27 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
       raise "unknown capabilities: #{inspect(unknown_caps)}"
     end
 
-    {%{handle | state: :upload_haves, caps: caps, wants: parse_cmds(wants)}, lines, []}
+    handle = %{handle | state: :upload_haves, caps: caps, wants: parse_cmds(wants)}
+
+    if depth,
+      do: shallow_update(handle, client_shallows, depth, lines),
+      else: {handle, lines, []}
   end
+
+  # git/upload-pack.c deepen/send_shallow/send_unshallow: boundary commits the
+  # client doesn't already have as shallow are answered `shallow`, client
+  # shallows now inside the depth `unshallow`, then a flush
+  defp shallow_update(handle, client_shallows, depth, lines) do
+    {:ok, {within, boundary}} = GitAgent.shallow_commits(handle.agent, handle.wants, depth)
+
+    shallow = for oid <- boundary, oid not in client_shallows, do: {:shallow, oid}
+    unshallow = for oid <- client_shallows, oid in within, do: {:unshallow, oid}
+
+    {%{handle | shallow_pack: within ++ boundary}, lines, shallow ++ unshallow ++ [:flush]}
+  end
+
+  defp deepen?({:deepen, _depth}), do: true
+  defp deepen?(_line), do: false
 
   @impl true
   def skip(%__MODULE__{state: :disco} = handle) do

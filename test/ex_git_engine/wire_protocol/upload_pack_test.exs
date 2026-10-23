@@ -411,4 +411,137 @@ defmodule ExGitEngine.WireProtocol.UploadPackTest do
       assert "no-done" in skipped.advertised_caps
     end
   end
+
+  describe "shallow (deepen)" do
+    # a bare repo with a linear history of `count` commits; returns the oids, newest first
+    defp linear_repo(count) do
+      tmp =
+        Path.join(System.tmp_dir!(), "upload-pack-shallow-#{System.unique_integer([:positive])}")
+
+      work = Path.join(tmp, "work")
+      env = [{"GIT_CONFIG_GLOBAL", "/dev/null"}, {"GIT_CONFIG_SYSTEM", "/dev/null"}]
+      git = fn args -> {_, 0} = System.cmd("git", ["-C", work | args], env: env) end
+
+      File.mkdir_p!(work)
+      git.(["init", "-q", "-b", "main"])
+
+      for i <- 1..count do
+        File.write!(Path.join(work, "f#{i}.txt"), "#{i}\n")
+        git.(["add", "."])
+        git.(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "c#{i}"])
+      end
+
+      {log, 0} = System.cmd("git", ["-C", work, "rev-list", "main"], env: env)
+
+      {_, 0} =
+        System.cmd("git", ["clone", "-q", "--bare", work, Path.join(tmp, "bare")], env: env)
+
+      on_exit(fn -> File.rm_rf!(tmp) end)
+
+      {:ok, agent} = ExGitEngine.GitAgent.start_link(Path.join(tmp, "bare"))
+      {agent, tmp, String.split(log, "\n", trim: true)}
+    end
+
+    # commits in `pack`, counted by git itself
+    defp pack_commits(tmp, pack) do
+      dir = Path.join(tmp, "unpack")
+      env = [{"GIT_CONFIG_GLOBAL", "/dev/null"}, {"GIT_CONFIG_SYSTEM", "/dev/null"}]
+      {_, 0} = System.cmd("git", ["init", "-q", "--bare", dir], env: env)
+      pack_file = Path.join(tmp, "in.pack")
+      File.write!(pack_file, pack)
+
+      {_, 0} =
+        System.cmd("git", ["-C", dir, "index-pack", "-o", Path.join(tmp, "in.idx"), pack_file],
+          env: env
+        )
+
+      {out, 0} = System.cmd("git", ["verify-pack", "-v", Path.join(tmp, "in.idx")], env: env)
+      out |> String.split("\n") |> Enum.count(&String.contains?(&1, " commit "))
+    end
+
+    test "shallow is advertised for git-upload-pack" do
+      assert "shallow" in ExGitEngine.WireProtocol.server_capabilities("git-upload-pack")
+    end
+
+    test "deepen line is decoded" do
+      assert [{:deepen, 3}, :flush] =
+               Enum.to_list(ExGitEngine.WireProtocol.decode("000ddeepen 3\n0000"))
+    end
+
+    test "shallow and unshallow lines are encoded" do
+      oid = :crypto.strong_rand_bytes(20)
+      hex = ExGitEngine.Git.oid_fmt(oid)
+
+      assert ExGitEngine.WireProtocol.pkt_line({:shallow, oid}) == "0035shallow #{hex}\n"
+      assert ExGitEngine.WireProtocol.pkt_line({:unshallow, oid}) == "0037unshallow #{hex}\n"
+    end
+
+    test "deepen 1 answers the tip as shallow and packs only the tip commit" do
+      {agent, tmp, [tip | _]} = linear_repo(5)
+      tip_oid = ExGitEngine.Git.oid_parse(tip)
+
+      handle = %UploadPack{
+        agent: agent,
+        state: :upload_req,
+        advertised_caps: ExGitEngine.WireProtocol.server_capabilities("git-upload-pack")
+      }
+
+      {handle, [], update} =
+        UploadPack.next(handle, [{:want, "#{tip} shallow"}, {:deepen, 1}, :flush])
+
+      assert update == [{:shallow, tip_oid}, :flush]
+
+      {_handle, [], [:nak, pack]} = UploadPack.next(handle, [:done])
+      assert pack_commits(tmp, pack) == 1
+    end
+
+    test "deepen 3 answers the third commit as shallow and packs three commits" do
+      {agent, tmp, [tip, _, third | _]} = linear_repo(5)
+
+      handle = %UploadPack{
+        agent: agent,
+        state: :upload_req,
+        advertised_caps: ExGitEngine.WireProtocol.server_capabilities("git-upload-pack")
+      }
+
+      {handle, [], update} =
+        UploadPack.next(handle, [{:want, "#{tip} shallow"}, {:deepen, 3}, :flush])
+
+      assert update == [{:shallow, ExGitEngine.Git.oid_parse(third)}, :flush]
+
+      {_handle, [], [:nak, pack]} = UploadPack.next(handle, [:done])
+      assert pack_commits(tmp, pack) == 3
+    end
+
+    test "deepen past the root answers no shallow commits and packs the whole history" do
+      {agent, tmp, [tip | _]} = linear_repo(3)
+
+      handle = %UploadPack{
+        agent: agent,
+        state: :upload_req,
+        advertised_caps: ExGitEngine.WireProtocol.server_capabilities("git-upload-pack")
+      }
+
+      {handle, [], [:flush]} =
+        UploadPack.next(handle, [{:want, "#{tip} shallow"}, {:deepen, 10}, :flush])
+
+      {_handle, [], [:nak, pack]} = UploadPack.next(handle, [:done])
+      assert pack_commits(tmp, pack) == 3
+    end
+
+    test "a client shallow commit inside the new depth is answered as unshallow" do
+      {agent, _tmp, [tip, second | _]} = linear_repo(5)
+
+      handle = %UploadPack{
+        agent: agent,
+        state: :upload_req,
+        advertised_caps: ExGitEngine.WireProtocol.server_capabilities("git-upload-pack")
+      }
+
+      lines = [{:want, "#{tip} shallow"}, {:shallow, second}, {:deepen, 3}, :flush]
+      {_handle, [], update} = UploadPack.next(handle, lines)
+
+      assert {:unshallow, ExGitEngine.Git.oid_parse(second)} in update
+    end
+  end
 end

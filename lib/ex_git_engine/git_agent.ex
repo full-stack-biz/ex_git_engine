@@ -811,6 +811,22 @@ defmodule ExGitEngine.GitAgent do
   def pack_create(agent, oids, opts \\ []), do: exec(agent, {:pack, oids}, opts)
 
   @doc """
+  Returns the commits within `depth` of the given `wants` (the wants are depth 1),
+  and the shallow boundary: those of them whose parents lie beyond `depth`.
+  """
+  @spec shallow_commits(agent, [Git.oid()], pos_integer, keyword) ::
+          {:ok, {[Git.oid()], [Git.oid()]}} | {:error, term}
+  def shallow_commits(agent, wants, depth, opts \\ []),
+    do: exec(agent, {:shallow_commits, wants, depth}, opts)
+
+  @doc """
+  Returns a Git PACK holding exactly the given commits and their trees, without
+  any of their ancestors.
+  """
+  @spec pack_commits(agent, [Git.oid()], keyword) :: {:ok, binary} | {:error, term}
+  def pack_commits(agent, commits, opts \\ []), do: exec(agent, {:pack_commits, commits}, opts)
+
+  @doc """
   Executes the given `cb` inside a transaction.
   """
   @spec transaction(agent, term, (Git.repo() -> {:ok, term} | {:error, term}), keyword) ::
@@ -1410,6 +1426,17 @@ defmodule ExGitEngine.GitAgent do
     with {:ok, walk} <- Git.revwalk_new(handle),
          :ok <- walk_insert(walk, oid_mask(oids)),
          do: Git.revwalk_pack(walk)
+  end
+
+  # git/shallow.c get_shallows_or_depth: breadth first, so each commit gets its
+  # minimal depth; wants are depth 1, commits reaching `depth` are the boundary
+  defp call(handle, {:shallow_commits, wants, depth}),
+    do: shallow_walk(handle, Enum.uniq(wants), depth, 1, MapSet.new(wants), [])
+
+  defp call(handle, {:pack_commits, commits}) do
+    with {:ok, pack} <- Git.pack_new(handle),
+         :ok <- pack_insert_commits(pack, commits),
+         do: Git.pack_data(pack)
   end
 
   defp call(handle, {:transaction, _name, cb}) do
@@ -2056,6 +2083,53 @@ defmodule ExGitEngine.GitAgent do
 
   defp signature_tuple(sig) do
     {sig.name, sig.email, DateTime.to_unix(sig.timestamp), sig.timestamp.utc_offset}
+  end
+
+  defp shallow_walk(_handle, [], _depth, _level, _seen, within), do: {:ok, {within, []}}
+
+  defp shallow_walk(_handle, level_oids, depth, level, _seen, within) when level >= depth,
+    do: {:ok, {within, level_oids}}
+
+  defp shallow_walk(handle, level_oids, depth, level, seen, within) do
+    case commit_parent_oids(handle, level_oids) do
+      {:ok, parents} ->
+        next = parents |> Enum.uniq() |> Enum.reject(&MapSet.member?(seen, &1))
+        seen = Enum.into(next, seen)
+        shallow_walk(handle, next, depth, level + 1, seen, within ++ level_oids)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp commit_parent_oids(handle, oids) do
+    Enum.reduce_while(oids, {:ok, []}, fn oid, {:ok, acc} ->
+      with {:ok, :commit, commit} <- Git.object_lookup(handle, oid),
+           {:ok, count} <- Git.commit_parent_count(commit),
+           {:ok, parents} <- commit_parent_list(commit, count) do
+        {:cont, {:ok, acc ++ parents}}
+      else
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp commit_parent_list(commit, count) do
+    Enum.reduce_while(0..(count - 1)//1, {:ok, []}, fn i, {:ok, acc} ->
+      case Git.commit_parent(commit, i) do
+        {:ok, oid, _parent} -> {:cont, {:ok, acc ++ [oid]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp pack_insert_commits(_pack, []), do: :ok
+
+  defp pack_insert_commits(pack, [oid | oids]) do
+    case Git.pack_insert_commit(pack, oid) do
+      :ok -> pack_insert_commits(pack, oids)
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   defp walk_insert(_walk, []), do: :ok

@@ -20,7 +20,7 @@ defmodule ExGitEngine.WireProtocol do
   alias ExGitEngine.GitAgent
   alias ExGitEngine.GitRef
 
-  @upload_caps ~w(multi_ack multi_ack_detailed ofs-delta side-band side-band-64k)
+  @upload_caps ~w(multi_ack multi_ack_detailed ofs-delta side-band side-band-64k shallow)
   @receive_caps ~w(report-status report-status-v2 delete-refs ofs-delta atomic side-band-64k)
 
   @doc """
@@ -174,6 +174,8 @@ defmodule ExGitEngine.WireProtocol do
           | {:ack, Git.oid()}
           | {:ack, Git.oid(), binary}
           | :nak
+          | {:shallow, Git.oid()}
+          | {:unshallow, Git.oid()}
           | binary
           | {:sideband_report, integer, [term]}
           | {:sideband, integer, binary}
@@ -196,6 +198,8 @@ defmodule ExGitEngine.WireProtocol do
   def pkt_line({:ack, oid}), do: pkt_line("ACK #{Git.oid_fmt(oid)}")
   def pkt_line({:ack, oid, status}), do: pkt_line("ACK #{Git.oid_fmt(oid)} #{status}")
   def pkt_line(:nak), do: pkt_line("NAK")
+  def pkt_line({:shallow, oid}), do: pkt_line("shallow #{Git.oid_fmt(oid)}")
+  def pkt_line({:unshallow, oid}), do: pkt_line("unshallow #{Git.oid_fmt(oid)}")
   def pkt_line({:unpack, status}), do: pkt_line("unpack #{status}")
   def pkt_line({:ok, refname}), do: pkt_line("ok #{refname}")
   def pkt_line({:ng, refname, reason}), do: pkt_line("ng #{refname} #{reason}")
@@ -222,6 +226,8 @@ defmodule ExGitEngine.WireProtocol do
   def pkt_line({:ack, oid}, _caps), do: pkt_line({:ack, oid})
   def pkt_line({:ack, oid, status}, _caps), do: pkt_line({:ack, oid, status})
   def pkt_line(:nak, _caps), do: pkt_line(:nak)
+  def pkt_line({:shallow, oid}, _caps), do: pkt_line({:shallow, oid})
+  def pkt_line({:unshallow, oid}, _caps), do: pkt_line({:unshallow, oid})
 
   def pkt_line({:sideband_pack, channel, data}, _caps),
     do: pkt_line({:sideband_pack, channel, data})
@@ -487,5 +493,6 @@ defmodule ExGitEngine.WireProtocol do
   defp pkt_decode("want " <> hash), do: {:want, hash}
   defp pkt_decode("have " <> hash), do: {:have, hash}
   defp pkt_decode("shallow " <> hash), do: {:shallow, hash}
+  defp pkt_decode("deepen " <> depth), do: {:deepen, String.to_integer(depth)}
   defp pkt_decode(pkt_line), do: pkt_line
 end

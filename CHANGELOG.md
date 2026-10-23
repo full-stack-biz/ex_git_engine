@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-10-23
+
+### Added
+
+- Shallow clones and fetches (`git clone --depth N`, `git fetch --depth N`): `git-upload-pack` advertises `shallow` and accepts `deepen N`. It answers the commits at the depth boundary as `shallow` and the client's shallow commits that are now within the depth as `unshallow`, then sends a pack with only the commits within the depth. Before, every `--depth` request failed with `Server does not support shallow clients`.
+- `GitAgent.shallow_commits/4`: the commits within a depth of the given wants, and the boundary commits whose parents lie beyond it.
+- `GitAgent.pack_commits/3`: a pack of exactly the given commits and their trees, without their ancestors.
+
+`deepen-since`, `deepen-not` and `deepen-relative` are not supported. A deepening fetch receives commits it already has: the client's `have` lines are not subtracted from a shallow pack.
+
 ## [0.12.2] - 2026-10-14
 
 ### Fixed
@@ -203,6 +213,7 @@ First release as a standalone Hex package, extracted and modernised from [git.li
 - Tag peeling and `GitAgent` tag-related functions.
 - `references_target` resolution for symbolic refs.
 
+[0.13.0]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.12.2...v0.13.0
 [0.9.6]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.9.3...v0.9.4
