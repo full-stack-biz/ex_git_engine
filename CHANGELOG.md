@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.1] - 2026-11-03
+
+### Fixed
+
+- `git-upload-pack` answers an `ERR` pkt-line in place of ACK/NAK when a `GitAgent` call fails, so git exits with `remote error: server is busy, try again later` (when `JobLimiter` returns `{:error, :busy}`) or `remote error: upload-pack failed`, and the reason is logged as a warning. Before, the `{:error, reason}` raised a `MatchError` in the transport process; over SSH the channel closed with no exit status and git reported `the remote end hung up unexpectedly`.
+
 ## [0.13.0] - 2026-10-23
 
 ### Added
@@ -213,6 +219,7 @@ First release as a standalone Hex package, extracted and modernised from [git.li
 - Tag peeling and `GitAgent` tag-related functions.
 - `references_target` resolution for symbolic refs.
 
+[0.13.1]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.12.2...v0.13.0
 [0.9.6]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.9.4...v0.9.5
