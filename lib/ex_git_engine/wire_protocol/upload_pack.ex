@@ -95,24 +95,22 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
   end
 
   def next(%__MODULE__{state: :upload_haves} = handle, lines) do
-    {:ok, odb} = GitAgent.odb(handle.agent)
     {haves, lines} = Enum.split_while(lines, &obj_match?(&1, :have))
 
-    haves =
-      Enum.filter(parse_cmds(haves), fn have ->
-        case GitAgent.odb_object_exists?(handle.agent, odb, have) do
-          {:ok, exists?} -> exists?
-          {:error, reason} -> raise reason
-        end
-      end)
-
-    {%{handle | haves: haves}, lines, []}
+    with {:ok, odb} <- GitAgent.odb(handle.agent),
+         {:ok, haves} <- existing_haves(handle.agent, odb, parse_cmds(haves)) do
+      {%{handle | haves: haves}, lines, []}
+    else
+      {:error, reason} -> error_output(handle, reason)
+    end
   end
 
   def next(%__MODULE__{state: :pack, shallow_pack: commits} = handle, []) when is_list(commits) do
     # ponytail: haves are not subtracted, so a deepening fetch gets commits it already has
-    {:ok, pack} = GitAgent.pack_commits(handle.agent, commits, timeout: :infinity)
-    {%{handle | state: :done}, [], pack_output(:nak, pack, handle.caps)}
+    case GitAgent.pack_commits(handle.agent, commits, timeout: :infinity) do
+      {:ok, pack} -> {%{handle | state: :done}, [], pack_output(:nak, pack, handle.caps)}
+      {:error, reason} -> error_output(handle, reason)
+    end
   end
 
   def next(%__MODULE__{state: :pack} = handle, []) do
@@ -120,23 +118,19 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
       "UPLOAD_PACK: pack state with empty input, haves=#{length(handle.haves)}, wants=#{length(handle.wants)}"
     )
 
-    if Enum.empty?(handle.haves) do
-      {:ok, pack} = GitAgent.pack_create(handle.agent, handle.wants, timeout: :infinity)
-      Logger.debug("UPLOAD_PACK: created pack (no haves), size=#{byte_size(pack)}")
-      {%{handle | state: :done}, [], pack_output(:nak, pack, handle.caps)}
-    else
-      haves = List.flatten(Enum.reverse(handle.haves))
-      Logger.debug("UPLOAD_PACK: creating pack with haves=#{length(haves)}")
+    haves = List.flatten(Enum.reverse(handle.haves))
+    oids = handle.wants ++ Enum.map(haves, &{&1, true})
 
-      {:ok, pack} =
-        GitAgent.pack_create(handle.agent, handle.wants ++ Enum.map(haves, &{&1, true}),
-          timeout: :infinity
-        )
+    lead =
+      if haves != [] and multi_ack?(handle.caps), do: {:ack, List.first(haves)}, else: :nak
 
-      Logger.debug("UPLOAD_PACK: created pack (with haves), size=#{byte_size(pack)}")
+    case GitAgent.pack_create(handle.agent, oids, timeout: :infinity) do
+      {:ok, pack} ->
+        Logger.debug("UPLOAD_PACK: created pack, haves=#{length(haves)}, size=#{byte_size(pack)}")
+        {%{handle | state: :done}, [], pack_output(lead, pack, handle.caps)}
 
-      lead = if multi_ack?(handle.caps), do: {:ack, List.first(haves)}, else: :nak
-      {%{handle | state: :done}, [], pack_output(lead, pack, handle.caps)}
+      {:error, reason} ->
+        error_output(handle, reason)
     end
   end
 
@@ -247,6 +241,31 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
       true -> {:ack, have}
     end
   end
+
+  defp existing_haves(agent, odb, haves) do
+    Enum.reduce_while(haves, {:ok, []}, fn have, {:ok, acc} ->
+      case GitAgent.odb_object_exists?(agent, odb, have) do
+        {:ok, true} -> {:cont, {:ok, [have | acc]}}
+        {:ok, false} -> {:cont, {:ok, acc}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> then(fn
+      {:ok, acc} -> {:ok, Enum.reverse(acc)}
+      error -> error
+    end)
+  end
+
+  # An ERR pkt-line in place of ACK/NAK: git's fetch-pack reads it with
+  # PACKET_READ_DIE_ON_ERR_PACKET and exits with "remote error: <msg>"
+  # (gitprotocol-pack: "Instead of ACK or NAK, the server may send an error message").
+  defp error_output(handle, reason) do
+    Logger.warning("UPLOAD_PACK: failed: #{inspect(reason)}")
+    {%{handle | state: :done}, [], ["ERR " <> error_message(reason)]}
+  end
+
+  defp error_message(:busy), do: "server is busy, try again later"
+  defp error_message(_reason), do: "upload-pack failed"
 
   defp multi_ack?(caps) do
     "multi_ack" in caps or "multi_ack_detailed" in caps

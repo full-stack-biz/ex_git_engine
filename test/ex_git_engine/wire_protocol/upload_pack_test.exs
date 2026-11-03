@@ -289,12 +289,79 @@ defmodule ExGitEngine.WireProtocol.UploadPackTest do
     end
 
     test ":done line transitions to :pack then tries pack_create" do
-      # :done with empty wants/haves and nil agent → exec returns {:error, reason}
-      # → {:ok, pack} = {:error, reason} raises MatchError
-      # This confirms the :done clause transitions state before hitting the agent call
+      # nil agent → exec returns {:error, reason}: answered with ERR, not a crash
       handle = %UploadPack{state: :upload_haves, caps: [], haves: [], wants: [], agent: nil}
 
-      assert_raise MatchError, fn -> UploadPack.next(handle, [:done]) end
+      assert {%UploadPack{state: :done}, [], ["ERR upload-pack failed"]} =
+               UploadPack.next(handle, [:done])
+    end
+  end
+
+  describe "agent errors" do
+    # an agent whose every call is answered {:error, :busy}, as JobLimiter does when its
+    # queue is full
+    defp busy_agent do
+      spawn_link(fn -> busy_loop() end)
+    end
+
+    defp busy_loop do
+      receive do
+        {:"$gen_call", from, _op} -> GenServer.reply(from, {:error, :busy})
+      end
+
+      busy_loop()
+    end
+
+    @busy ["ERR server is busy, try again later"]
+
+    test "pack_create without haves answers ERR instead of crashing" do
+      handle = %UploadPack{
+        state: :pack,
+        caps: ["side-band-64k"],
+        haves: [],
+        wants: [],
+        agent: busy_agent()
+      }
+
+      assert {%UploadPack{state: :done}, [], @busy} = UploadPack.next(handle, [])
+    end
+
+    test "pack_create with haves answers ERR instead of crashing" do
+      oid = :crypto.strong_rand_bytes(20)
+      handle = %UploadPack{state: :pack, caps: [], haves: [[oid]], wants: [], agent: busy_agent()}
+
+      assert {%UploadPack{state: :done}, [], @busy} = UploadPack.next(handle, [])
+    end
+
+    test "a shallow pack answers ERR instead of crashing" do
+      handle = %UploadPack{
+        state: :pack,
+        caps: [],
+        shallow_pack: [],
+        wants: [],
+        agent: busy_agent()
+      }
+
+      assert {%UploadPack{state: :done}, [], @busy} = UploadPack.next(handle, [])
+    end
+
+    test "checking haves answers ERR instead of crashing" do
+      have = {:have, String.duplicate("a", 40)}
+
+      handle = %UploadPack{
+        state: :upload_haves,
+        caps: [],
+        haves: [],
+        wants: [],
+        agent: busy_agent()
+      }
+
+      assert {%UploadPack{state: :done}, [], @busy} = UploadPack.next(handle, [have])
+    end
+
+    test "ERR is framed as a pkt-line the client dies on" do
+      assert IO.iodata_to_binary(ExGitEngine.WireProtocol.encode(@busy)) ==
+               "0028ERR server is busy, try again later\n"
     end
   end
 
