@@ -24,7 +24,9 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
     haves: [],
     pending_wants: [],
     shallow_pack: nil,
-    pkt_rest: ""
+    pkt_rest: "",
+    send: nil,
+    keepalive_ms: 5_000
   ]
 
   @type t :: %__MODULE__{
@@ -37,7 +39,9 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
           haves: [Git.oid()],
           pending_wants: [term],
           shallow_pack: [Git.oid()] | nil,
-          pkt_rest: binary
+          pkt_rest: binary,
+          send: (iodata -> term) | nil,
+          keepalive_ms: pos_integer
         }
 
   #
@@ -107,10 +111,9 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
 
   def next(%__MODULE__{state: :pack, shallow_pack: commits} = handle, []) when is_list(commits) do
     # ponytail: haves are not subtracted, so a deepening fetch gets commits it already has
-    case GitAgent.pack_commits(handle.agent, commits, timeout: :infinity) do
-      {:ok, pack} -> {%{handle | state: :done}, [], pack_output(:nak, pack, handle.caps)}
-      {:error, reason} -> error_output(handle, reason)
-    end
+    pack_reply(handle, :nak, fn ->
+      GitAgent.pack_commits(handle.agent, commits, timeout: :infinity)
+    end)
   end
 
   def next(%__MODULE__{state: :pack} = handle, []) do
@@ -124,14 +127,9 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
     lead =
       if haves != [] and multi_ack?(handle.caps), do: {:ack, List.first(haves)}, else: :nak
 
-    case GitAgent.pack_create(handle.agent, oids, timeout: :infinity) do
-      {:ok, pack} ->
-        Logger.debug("UPLOAD_PACK: created pack, haves=#{length(haves)}, size=#{byte_size(pack)}")
-        {%{handle | state: :done}, [], pack_output(lead, pack, handle.caps)}
-
-      {:error, reason} ->
-        error_output(handle, reason)
-    end
+    pack_reply(handle, lead, fn ->
+      GitAgent.pack_create(handle.agent, oids, timeout: :infinity)
+    end)
   end
 
   def next(%__MODULE__{state: :pack} = handle, lines) do
@@ -271,16 +269,76 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
     "multi_ack" in caps or "multi_ack_detailed" in caps
   end
 
-  defp pack_output(lead, pack, caps) do
+  # With a transport `send` and side-band, the ACK/NAK goes out before the pack is built and a
+  # keepalive every `keepalive_ms` while it waits, as git's upload-pack does (create_pack_file:
+  # an empty side-band packet every uploadpack.keepAlive seconds, 5 by default). Without
+  # side-band nothing may be sent before the pack, so the reply is built in one piece.
+  defp pack_reply(handle, lead, build) do
+    if is_function(handle.send, 1) and sideband_chunk(handle.caps) do
+      stream_pack(%{handle | state: :done}, lead, build)
+    else
+      case build.() do
+        {:ok, pack} -> {%{handle | state: :done}, [], pack_output(lead, pack, handle.caps)}
+        {:error, reason} -> error_output(handle, reason)
+      end
+    end
+  end
+
+  # The pack is built in a linked task so this process can send keepalives; when the client
+  # is gone the task is killed and JobLimiter drops its queued job.
+  defp stream_pack(handle, lead, build) do
+    with :ok <- transmit(handle, [lead]),
+         {:ok, result} <- await_pack(handle, Task.async(build)) do
+      case result do
+        {:ok, pack} ->
+          {handle, [], pack_to_sideband_frames(pack, sideband_chunk(handle.caps)) ++ [:flush]}
+
+        # After ACK/NAK an ERR line is not read any more; band 3 is (git sideband.c: "remote error").
+        {:error, reason} ->
+          Logger.warning("UPLOAD_PACK: failed: #{inspect(reason)}")
+          {handle, [], [{:sideband, 3, error_message(reason)}]}
+      end
+    else
+      {:error, _closed} -> {handle, [], []}
+    end
+  end
+
+  defp await_pack(handle, task) do
+    case Task.yield(task, handle.keepalive_ms) do
+      {:ok, result} ->
+        {:ok, result}
+
+      nil ->
+        case transmit(handle, [{:sideband_pack, 1, ""}]) do
+          :ok ->
+            await_pack(handle, task)
+
+          error ->
+            Task.shutdown(task, :brutal_kill)
+            error
+        end
+    end
+  end
+
+  defp transmit(handle, lines) do
+    case handle.send.(ExGitEngine.WireProtocol.encode(lines)) do
+      {:error, _reason} = error -> error
+      _sent -> :ok
+    end
+  end
+
+  defp sideband_chunk(caps) do
     cond do
-      "side-band-64k" in caps ->
-        [lead] ++ pack_to_sideband_frames(pack, 65_515) ++ [:flush]
+      "side-band-64k" in caps -> 65_515
+      "side-band" in caps -> 995
+      true -> nil
+    end
+  end
 
-      "side-band" in caps ->
-        [lead] ++ pack_to_sideband_frames(pack, 995) ++ [:flush]
-
-      true ->
-        [lead, pack]
+  defp pack_output(lead, pack, caps) do
+    case sideband_chunk(caps) do
+      nil -> [lead, pack]
+      chunk -> [lead] ++ pack_to_sideband_frames(pack, chunk) ++ [:flush]
     end
   end
 

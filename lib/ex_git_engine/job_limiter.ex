@@ -13,11 +13,11 @@ defmodule ExGitEngine.JobLimiter do
   Waiting jobs are dropped when their caller has exited before they start, so a
   page the user left does not still cost a blame.
 
-  Like a busy port, the limiter turns work away when its queue reaches
-  `high_water` (default `10 * max_jobs`): callers get `{:error, :busy}` at once
-  instead of waiting until they time out. It accepts work again once the queue
-  has drained to `low_water` (default `high_water / 2`). Both can be set with
-  `config :ex_git_engine, high_water: n, low_water: n`.
+  A job waits in the queue at most `max_wait` milliseconds (default `60_000`,
+  `:infinity` for no limit); then its caller gets `{:error, :busy}`. The queue
+  holds at most `high_water` jobs (default `50 * max_jobs`); a job that would
+  go past it gets `{:error, :busy}` at once. Both can be set with
+  `config :ex_git_engine, max_wait: ms, high_water: n`.
 
   Started by `ExGitEngine.Application`. `GitAgent` sends its long operations
   here; `run/3` is the same for any other function:
@@ -30,7 +30,7 @@ defmodule ExGitEngine.JobLimiter do
 
   @doc """
   Starts a limiter. Options: `:name` (default `#{inspect(__MODULE__)}`, `nil`
-  for none), `:max_jobs`, `:high_water` and `:low_water`.
+  for none), `:max_jobs`, `:high_water` and `:max_wait`.
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts \\ []) do
@@ -71,14 +71,12 @@ defmodule ExGitEngine.JobLimiter do
     end
 
     max_jobs = setting.(:max_jobs, default)
-    high_water = setting.(:high_water, 10 * max_jobs)
 
     {:ok,
      %{
        max_jobs: max_jobs,
-       high_water: high_water,
-       low_water: setting.(:low_water, div(high_water, 2)),
-       busy: false,
+       high_water: setting.(:high_water, 50 * max_jobs),
+       max_wait: setting.(:max_wait, 60_000),
        running: MapSet.new(),
        queue: :queue.new()
      }}
@@ -97,20 +95,33 @@ defmodule ExGitEngine.JobLimiter do
     {:noreply, start_next(%{state | running: MapSet.delete(state.running, ref)})}
   end
 
+  # A job that started before its deadline is not in the queue any more: nothing to do.
+  def handle_info({:expire, from}, state) do
+    {expired, queue} = Enum.split_with(:queue.to_list(state.queue), fn {f, _fun} -> f == from end)
+    for {f, _fun} <- expired, do: GenServer.reply(f, {:error, :busy})
+    {:noreply, %{state | queue: :queue.from_list(queue)}}
+  end
+
   defp enqueue(state, from, fun) do
-    if state.busy or :queue.len(state.queue) >= state.high_water do
+    if :queue.len(state.queue) >= state.high_water do
       GenServer.reply(from, {:error, :busy})
-      %{state | busy: true}
+      state
     else
-      start_next(%{state | queue: :queue.in({from, fun}, state.queue)})
+      state = start_next(%{state | queue: :queue.in({from, fun}, state.queue)})
+      # ponytail: an O(n) scan per expiry, n <= high_water
+      if state.max_wait != :infinity and queued?(state, from),
+        do: Process.send_after(self(), {:expire, from}, state.max_wait)
+
+      state
     end
   end
+
+  defp queued?(state, from), do: :queue.any(fn {f, _fun} -> f == from end, state.queue)
 
   defp start_next(state) do
     case MapSet.size(state.running) < state.max_jobs && :queue.out(state.queue) do
       {{:value, job}, queue} ->
-        busy = state.busy and :queue.len(queue) > state.low_water
-        start_next(start_job(%{state | queue: queue, busy: busy}, job))
+        start_next(start_job(%{state | queue: queue}, job))
 
       _full_or_empty ->
         state

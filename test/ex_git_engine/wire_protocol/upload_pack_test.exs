@@ -365,6 +365,95 @@ defmodule ExGitEngine.WireProtocol.UploadPackTest do
     end
   end
 
+  describe "waiting for a pack with a transport send function" do
+    # an agent that hands each call to the test, which answers it when it wants
+    defp held_agent(test) do
+      spawn_link(fn -> held_loop(test) end)
+    end
+
+    defp held_loop(test) do
+      receive do
+        {:"$gen_call", from, _op} -> send(test, {:agent_call, from})
+      end
+
+      held_loop(test)
+    end
+
+    defp waiting_handle(test) do
+      %UploadPack{
+        state: :pack,
+        caps: ["side-band-64k"],
+        haves: [],
+        wants: [],
+        agent: held_agent(test),
+        keepalive_ms: 20,
+        send: fn data ->
+          send(test, {:sent, IO.iodata_to_binary(data)})
+          :ok
+        end
+      }
+    end
+
+    test "sends NAK at once, a keepalive while the pack is built, then the pack" do
+      test = self()
+      result = Task.async(fn -> UploadPack.next(waiting_handle(test), []) end)
+
+      assert_receive {:agent_call, from}
+      assert_receive {:sent, "0008NAK\n"}
+      assert_receive {:sent, "0005\x01"}
+      assert_receive {:sent, "0005\x01"}
+
+      GenServer.reply(from, {:ok, "PACKdata"})
+
+      assert {%UploadPack{state: :done}, [], [{:sideband_pack, 1, "PACKdata"}, :flush]} =
+               Task.await(result)
+    end
+
+    test "a pack that fails after NAK is reported on side-band 3" do
+      test = self()
+      result = Task.async(fn -> UploadPack.next(waiting_handle(test), []) end)
+
+      assert_receive {:agent_call, from}
+      GenServer.reply(from, {:error, :busy})
+
+      assert {%UploadPack{state: :done}, [], [{:sideband, 3, "server is busy, try again later"}]} =
+               Task.await(result)
+    end
+
+    test "stops waiting when the client is gone" do
+      test = self()
+      sends = :counters.new(1, [])
+
+      handle = %{
+        waiting_handle(test)
+        | send: fn _data ->
+            :counters.add(sends, 1, 1)
+            if :counters.get(sends, 1) == 1, do: :ok, else: {:error, :closed}
+          end
+      }
+
+      result = Task.async(fn -> UploadPack.next(handle, []) end)
+
+      assert_receive {:agent_call, {caller, _}}
+      ref = Process.monitor(caller)
+
+      assert {%UploadPack{state: :done}, [], []} = Task.await(result)
+      assert_receive {:DOWN, ^ref, :process, ^caller, _}
+    end
+
+    test "without side-band the send function is not used" do
+      test = self()
+      handle = %{waiting_handle(test) | caps: []}
+      result = Task.async(fn -> UploadPack.next(handle, []) end)
+
+      assert_receive {:agent_call, from}
+      GenServer.reply(from, {:ok, "PACKdata"})
+
+      assert {%UploadPack{state: :done}, [], [:nak, "PACKdata"]} = Task.await(result)
+      refute_received {:sent, _}
+    end
+  end
+
   describe "next/2 pack state" do
     test "non-empty lines are a pass-through (data pending)" do
       handle = %UploadPack{state: :pack, caps: [], haves: [], wants: [], agent: nil}

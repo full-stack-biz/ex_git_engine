@@ -61,8 +61,8 @@ defmodule ExGitEngine.JobLimiterTest do
     assert JobLimiter.queued(limiter) == 0
   end
 
-  test "turns work away while its queue is above the high water mark, until it drains to the low one" do
-    limiter = start_supervised!({JobLimiter, name: nil, max_jobs: 1, high_water: 2, low_water: 0})
+  test "turns work away while its queue is at the high water mark, and takes it again once a slot frees" do
+    limiter = start_supervised!({JobLimiter, name: nil, max_jobs: 1, high_water: 1})
     test = self()
 
     gate = fn ->
@@ -73,27 +73,44 @@ defmodule ExGitEngine.JobLimiterTest do
     running = Task.async(fn -> JobLimiter.run(limiter, gate) end)
     assert_receive {:job, first}
 
-    queued = for _ <- 1..2, do: Task.async(fn -> JobLimiter.run(limiter, gate) end)
-    wait_until(fn -> JobLimiter.queued(limiter) == 2 end)
+    queued = Task.async(fn -> JobLimiter.run(limiter, gate) end)
+    wait_until(fn -> JobLimiter.queued(limiter) == 1 end)
 
     assert {:error, :busy} = JobLimiter.run(limiter, fn -> :never end)
 
     send(first, :go)
     assert :done = Task.await(running)
     assert_receive {:job, second}
-    assert {:error, :busy} = JobLimiter.run(limiter, fn -> :never end)
 
+    again = Task.async(fn -> JobLimiter.run(limiter, fn -> :ok end) end)
     send(second, :go)
-    assert_receive {:job, third}
-    wait_until(fn -> JobLimiter.queued(limiter) == 0 end)
-    send(third, :go)
-    assert [:done, :done] = Task.await_many(queued)
+    assert :done = Task.await(queued)
+    assert :ok = Task.await(again)
+  end
 
-    assert :ok = JobLimiter.run(limiter, fn -> :ok end)
+  test "a queued job waits at most max_wait, then its caller gets :busy" do
+    limiter = start_supervised!({JobLimiter, name: nil, max_jobs: 1, max_wait: 50})
+    test = self()
+
+    Task.async(fn ->
+      JobLimiter.run(limiter, fn ->
+        send(test, :started)
+        Process.sleep(:infinity)
+      end)
+    end)
+
+    assert_receive :started
+
+    {elapsed, result} = :timer.tc(fn -> JobLimiter.run(limiter, fn -> send(test, :ran) end) end)
+
+    assert result == {:error, :busy}
+    assert elapsed >= 50_000
+    assert JobLimiter.queued(limiter) == 0
+    refute_receive :ran, 100
   end
 
   test "answers a submitted caller directly when busy" do
-    limiter = start_supervised!({JobLimiter, name: nil, max_jobs: 1, high_water: 1, low_water: 0})
+    limiter = start_supervised!({JobLimiter, name: nil, max_jobs: 1, high_water: 1})
     test = self()
 
     Task.async(fn ->
