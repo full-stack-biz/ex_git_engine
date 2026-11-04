@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-11-04
+
+### Breaking changes
+
+- `JobLimiter` no longer waits without limit: a queued job waits at most `max_wait` milliseconds (default `60_000`), then its caller gets `{:error, :busy}` and the job does not run. Before, a job accepted into the queue waited until a slot freed, however long that took. Callers of `JobLimiter.run/3` and `GitAgent` operations sent to it (packs, blame, ahead/behind counts, pushed pack indexing, per-file patches) can now get `{:error, :busy}` after a minute under load. Set `config :ex_git_engine, max_wait: :infinity` for the old behaviour.
+- `JobLimiter`'s `low_water` option (`config :ex_git_engine, low_water: n`, `start_link(low_water: n)`) is removed and ignored. Before, a queue that reached `high_water` refused every job until it drained to `low_water`; now a job is refused only while the queue is at `high_water`.
+- `JobLimiter`'s default `high_water` is `50 * max_jobs` (was `10 * max_jobs`): the queue is a memory bound, and `max_wait` decides how long work waits.
+
+### Added
+
+- `UploadPack` takes a transport writer in its `send` field (`WireProtocol.new(agent, "git-upload-pack", send: fun)`, `fun` receives encoded iodata; a return of `{:error, reason}` means the client is gone). With it and a client that asked for `side-band` or `side-band-64k`, ACK/NAK is sent at once, then an empty side-band packet every `keepalive_ms` (default `5_000`) while the pack waits for a `JobLimiter` slot and is built, then the pack, as git's `upload-pack` does with `uploadpack.keepAlive`. A pack that fails after ACK/NAK is reported on side-band 3, so git exits with `remote error: server is busy, try again later`. When a send fails, the process waiting for the pack is killed, so a job still queued for it is dropped. Without `send`, or without side-band, the reply is built in one piece as before.
+
 ## [0.13.1] - 2026-11-03
 
 ### Fixed
@@ -219,6 +231,7 @@ First release as a standalone Hex package, extracted and modernised from [git.li
 - Tag peeling and `GitAgent` tag-related functions.
 - `references_target` resolution for symbolic refs.
 
+[0.14.0]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.13.1...v0.14.0
 [0.13.1]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.12.2...v0.13.0
 [0.9.6]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.9.5...v0.9.6
