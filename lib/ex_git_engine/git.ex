@@ -962,6 +962,16 @@ defmodule ExGitEngine.Git do
   end
 
   @doc """
+  Sets the process-wide *libgit2* limits, in bytes: cached object data, mapped pack data, and the
+  size of one mapped pack window.
+  """
+  @spec library_set_memory_limits(non_neg_integer, non_neg_integer, non_neg_integer) ::
+          :ok | {:error, term}
+  def library_set_memory_limits(_cache, _mapped, _window) do
+    :erlang.nif_error(:not_loaded)
+  end
+
+  @doc """
   Creates a new revision walk object for the given `repo`.
   """
   @spec revwalk_new(repo) :: {:ok, reference} | {:error, term}
@@ -1038,6 +1048,15 @@ defmodule ExGitEngine.Git do
   """
   @spec revwalk_pack(revwalk) :: {:ok, binary} | {:error, term}
   def revwalk_pack(_walk) do
+    :erlang.nif_error(:not_loaded)
+  end
+
+  @doc """
+  Writes the *PACK* file for the given `walk` to the existing file at `path`, without holding
+  the pack in memory.
+  """
+  @spec revwalk_pack_file(revwalk, binary) :: :ok | {:error, term}
+  def revwalk_pack_file(_walk, _path) do
     :erlang.nif_error(:not_loaded)
   end
 
@@ -1321,6 +1340,15 @@ defmodule ExGitEngine.Git do
   end
 
   @doc """
+  Adds the file at `path` to `config` above the repository's own files. Only this in-memory
+  `config` changes, which applies to the repository handle it came from.
+  """
+  @spec config_add_file(config, binary) :: :ok | {:error, term}
+  def config_add_file(_config, _path) do
+    :erlang.nif_error(:not_loaded)
+  end
+
+  @doc """
   Creates a new *PACK* object for the given `repo`.
   """
   @spec pack_new(repo) :: {:ok, pack} | {:error, term}
@@ -1349,6 +1377,14 @@ defmodule ExGitEngine.Git do
   """
   @spec pack_data(pack) :: {:ok, binary} | {:error, term}
   def pack_data(_pack) do
+    :erlang.nif_error(:not_loaded)
+  end
+
+  @doc """
+  Writes the *PACK* to the existing file at `path`, without holding it in memory.
+  """
+  @spec pack_write_file(pack, binary) :: :ok | {:error, term}
+  def pack_write_file(_pack, _path) do
     :erlang.nif_error(:not_loaded)
   end
 

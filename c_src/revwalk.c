@@ -1,5 +1,6 @@
 #include "ex_git_engine.h"
 #include "oid.h"
+#include "pack.h"
 #include "revwalk.h"
 #include <string.h>
 #include <git2.h>
@@ -196,4 +197,32 @@ git_engine_revwalk_pack(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	git_buf_free(&buf);
 
 	return enif_make_tuple2(env, atoms.ok, enif_make_binary(env, &pack));
+}
+
+ERL_NIF_TERM
+git_engine_revwalk_pack_file(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+	git_engine_revwalk *walk;
+	git_packbuilder *pb;
+	ERL_NIF_TERM result;
+	int error;
+
+	if (!enif_get_resource(env, argv[0], git_engine_revwalk_type, (void **)&walk))
+		return enif_make_badarg(env);
+
+	error = git_packbuilder_new(&pb, walk->repo->repo);
+	if (error < 0)
+		return git_engine_error_struct(env, error);
+
+	error = git_packbuilder_insert_walk(pb, walk->walk);
+	if (error < 0)
+	{
+		git_packbuilder_free(pb);
+		return git_engine_error_struct(env, error);
+	}
+
+	result = git_engine_pack_to_file(env, pb, argv[1]);
+	git_packbuilder_free(pb);
+
+	return result;
 }

@@ -759,6 +759,59 @@ defmodule ExGitEngine.GitAgentTest do
     end
   end
 
+  describe "pack_file/4 and pack_commits_file/4" do
+    setup %{agent: agent} do
+      pack_path = Path.join(System.tmp_dir!(), "ex_git_engine-pack-#{:erlang.unique_integer()}")
+      File.touch!(pack_path)
+      on_exit(fn -> File.rm(pack_path) end)
+      {:ok, ref} = GitAgent.branch(agent, "main")
+      {:ok, commit} = GitAgent.peel(agent, ref)
+      %{pack_path: pack_path, oid: commit.oid}
+    end
+
+    test "pack_file writes what pack_create returns", ctx do
+      {:ok, pack} = GitAgent.pack_create(ctx.agent, [ctx.oid])
+
+      assert :ok = GitAgent.pack_file(ctx.agent, [ctx.oid], ctx.pack_path)
+      assert File.read!(ctx.pack_path) == pack
+    end
+
+    test "config_add_file overrides this repository handle's config without touching the repo",
+         %{path: path, pack_path: extra} do
+      File.write!(extra, "[pack]\n\twindowMemory = 1234\n")
+      before = File.read!(Path.join(path, ".git/config"))
+
+      {:ok, repo} = ExGitEngine.Git.repository_open(path)
+      {:ok, config} = ExGitEngine.Git.repository_get_config(repo)
+      assert :ok = ExGitEngine.Git.config_add_file(config, extra)
+
+      assert {:ok, "1234"} = ExGitEngine.Git.config_get_string(config, "pack.windowMemory")
+      assert File.read!(Path.join(path, ".git/config")) == before
+    end
+
+    test "pack builds run with the memory limits in the pack config", ctx do
+      assert File.read!(ExGitEngine.Application.pack_config_path()) =~ "windowMemory"
+      {:ok, pack} = GitAgent.pack_create(ctx.agent, [ctx.oid])
+      assert <<"PACK", _::binary>> = pack
+    end
+
+    test "pack_commits_file writes what pack_commits returns", ctx do
+      {:ok, pack} = GitAgent.pack_commits(ctx.agent, [ctx.oid])
+
+      assert :ok = GitAgent.pack_commits_file(ctx.agent, [ctx.oid], ctx.pack_path)
+      assert File.read!(ctx.pack_path) == pack
+    end
+
+    test "a file removed before the build is not created again", ctx do
+      File.rm!(ctx.pack_path)
+
+      assert {:error, :pack_file_failed} =
+               GitAgent.pack_file(ctx.agent, [ctx.oid], ctx.pack_path)
+
+      refute File.exists?(ctx.pack_path)
+    end
+  end
+
   describe "merge_commits/4" do
     test "returns a GitIndex merging two diverged commits", %{agent: agent} do
       {:ok, main_ref} = GitAgent.branch(agent, "main")

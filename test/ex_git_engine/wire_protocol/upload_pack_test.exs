@@ -373,7 +373,9 @@ defmodule ExGitEngine.WireProtocol.UploadPackTest do
 
     defp held_loop(test) do
       receive do
-        {:"$gen_call", from, _op} -> send(test, {:agent_call, from})
+        {:"$gen_call", from, op} ->
+          send(test, {:agent_op, op})
+          send(test, {:agent_call, from})
       end
 
       held_loop(test)
@@ -403,10 +405,52 @@ defmodule ExGitEngine.WireProtocol.UploadPackTest do
       assert_receive {:sent, "0005\x01"}
       assert_receive {:sent, "0005\x01"}
 
-      GenServer.reply(from, {:ok, "PACKdata"})
+      assert_receive {:agent_op, {:pack_file, [], path}}
+      File.write!(path, "PACKdata")
+      GenServer.reply(from, :ok)
 
-      assert {%UploadPack{state: :done}, [], [{:sideband_pack, 1, "PACKdata"}, :flush]} =
-               Task.await(result)
+      assert_receive {:sent, "000d\x01PACKdata"}
+      assert {%UploadPack{state: :done}, [], [:flush]} = Task.await(result)
+      refute File.exists?(path)
+    end
+
+    test "sends the pack file in side-band sized chunks; only its owner can read it" do
+      test = self()
+      result = Task.async(fn -> UploadPack.next(waiting_handle(test), []) end)
+
+      assert_receive {:agent_call, from}
+      assert_receive {:agent_op, {:pack_file, [], path}}
+      assert Bitwise.band(File.stat!(path).mode, 0o077) == 0
+      File.write!(path, :binary.copy("x", 65_516))
+      GenServer.reply(from, :ok)
+
+      assert_receive {:sent, <<"fff0\x01", first::binary>>}
+      assert byte_size(first) == 65_515
+      assert_receive {:sent, "0006\x01x"}
+      assert {%UploadPack{state: :done}, [], [:flush]} = Task.await(result)
+    end
+
+    test "removes the pack file and stops when the client goes away during the send" do
+      test = self()
+      sends = :counters.new(1, [])
+
+      handle = %{
+        waiting_handle(test)
+        | keepalive_ms: 60_000,
+          send: fn _data ->
+            :counters.add(sends, 1, 1)
+            if :counters.get(sends, 1) == 1, do: :ok, else: {:error, :closed}
+          end
+      }
+
+      result = Task.async(fn -> UploadPack.next(handle, []) end)
+      assert_receive {:agent_call, from}
+      assert_receive {:agent_op, {:pack_file, [], path}}
+      File.write!(path, "PACKdata")
+      GenServer.reply(from, :ok)
+
+      assert {%UploadPack{state: :done}, [], []} = Task.await(result)
+      refute File.exists?(path)
     end
 
     test "a pack that fails after NAK is reported on side-band 3" do
@@ -439,6 +483,8 @@ defmodule ExGitEngine.WireProtocol.UploadPackTest do
 
       assert {%UploadPack{state: :done}, [], []} = Task.await(result)
       assert_receive {:DOWN, ^ref, :process, ^caller, _}
+      assert_receive {:agent_op, {:pack_file, [], path}}
+      refute File.exists?(path)
     end
 
     test "without side-band the send function is not used" do

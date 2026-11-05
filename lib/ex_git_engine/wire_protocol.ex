@@ -296,9 +296,19 @@ defmodule ExGitEngine.WireProtocol do
         )
 
         telemetry_next(service, old_state, ref, event_time)
-        exec_next_state(service, lines, acc ++ out, service.state, ref, event_time)
+        acc = flush_before_send(service, acc ++ out)
+        exec_next_state(service, lines, acc, service.state, ref, event_time)
     end
   end
+
+  # A later step may write straight to the transport with `send`; what is already buffered must
+  # go out first (one HTTP request answers the shallow list and the pack together).
+  defp flush_before_send(%{send: send}, [_ | _] = output) when is_function(send, 1) do
+    send.(encode(output))
+    []
+  end
+
+  defp flush_before_send(_service, output), do: output
 
   defp exec_after(service, lines) do
     if service.state == :done do

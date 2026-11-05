@@ -111,9 +111,12 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
 
   def next(%__MODULE__{state: :pack, shallow_pack: commits} = handle, []) when is_list(commits) do
     # ponytail: haves are not subtracted, so a deepening fetch gets commits it already has
-    pack_reply(handle, :nak, fn ->
-      GitAgent.pack_commits(handle.agent, commits, timeout: :infinity)
-    end)
+    pack_reply(
+      handle,
+      :nak,
+      fn -> GitAgent.pack_commits(handle.agent, commits, timeout: :infinity) end,
+      &GitAgent.pack_commits_file(handle.agent, commits, &1, timeout: :infinity)
+    )
   end
 
   def next(%__MODULE__{state: :pack} = handle, []) do
@@ -127,9 +130,12 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
     lead =
       if haves != [] and multi_ack?(handle.caps), do: {:ack, List.first(haves)}, else: :nak
 
-    pack_reply(handle, lead, fn ->
-      GitAgent.pack_create(handle.agent, oids, timeout: :infinity)
-    end)
+    pack_reply(
+      handle,
+      lead,
+      fn -> GitAgent.pack_create(handle.agent, oids, timeout: :infinity) end,
+      &GitAgent.pack_file(handle.agent, oids, &1, timeout: :infinity)
+    )
   end
 
   def next(%__MODULE__{state: :pack} = handle, lines) do
@@ -273,9 +279,13 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
   # keepalive every `keepalive_ms` while it waits, as git's upload-pack does (create_pack_file:
   # an empty side-band packet every uploadpack.keepAlive seconds, 5 by default). Without
   # side-band nothing may be sent before the pack, so the reply is built in one piece.
-  defp pack_reply(handle, lead, build) do
+  #
+  # A streamed pack goes through a temp file: it is never held in memory, and because libgit2 runs
+  # to the end without waiting for the client, a slow client holds no JobLimiter slot or dirty
+  # scheduler, only disk.
+  defp pack_reply(handle, lead, build, build_file) do
     if is_function(handle.send, 1) and sideband_chunk(handle.caps) do
-      stream_pack(%{handle | state: :done}, lead, build)
+      stream_pack(%{handle | state: :done}, lead, build_file)
     else
       case build.() do
         {:ok, pack} -> {%{handle | state: :done}, [], pack_output(lead, pack, handle.caps)}
@@ -286,20 +296,57 @@ defmodule ExGitEngine.WireProtocol.UploadPack do
 
   # The pack is built in a linked task so this process can send keepalives; when the client
   # is gone the task is killed and JobLimiter drops its queued job.
-  defp stream_pack(handle, lead, build) do
-    with :ok <- transmit(handle, [lead]),
-         {:ok, result} <- await_pack(handle, Task.async(build)) do
-      case result do
-        {:ok, pack} ->
-          {handle, [], pack_to_sideband_frames(pack, sideband_chunk(handle.caps)) ++ [:flush]}
+  defp stream_pack(handle, lead, build_file) do
+    path = pack_path()
 
+    try do
+      with :ok <- transmit(handle, [lead]),
+           :ok <- File.chmod(path, 0o600),
+           {:ok, :ok} <- await_pack(handle, Task.async(fn -> build_file.(path) end)),
+           :ok <- send_pack_file(handle, path) do
+        {handle, [], [:flush]}
+      else
         # After ACK/NAK an ERR line is not read any more; band 3 is (git sideband.c: "remote error").
-        {:error, reason} ->
+        {:ok, {:error, reason}} ->
           Logger.warning("UPLOAD_PACK: failed: #{inspect(reason)}")
           {handle, [], [{:sideband, 3, error_message(reason)}]}
+
+        {:error, _closed} ->
+          {handle, [], []}
       end
-    else
-      {:error, _closed} -> {handle, [], []}
+    after
+      File.rm(path)
+    end
+  end
+
+  defp pack_path do
+    name = "ex_git_engine-pack-#{System.unique_integer([:positive])}"
+    path = Path.join(ExGitEngine.Application.pack_tmp_dir(), name)
+    File.touch!(path)
+    path
+  end
+
+  defp send_pack_file(handle, path) do
+    with {:ok, file} <- File.open(path, [:read, :binary, :raw]) do
+      try do
+        send_chunks(handle, file, sideband_chunk(handle.caps))
+      after
+        File.close(file)
+      end
+    end
+  end
+
+  defp send_chunks(handle, file, chunk_size) do
+    case IO.binread(file, chunk_size) do
+      :eof ->
+        :ok
+
+      {:error, _reason} = error ->
+        error
+
+      chunk ->
+        with :ok <- transmit(handle, [{:sideband_pack, 1, chunk}]),
+             do: send_chunks(handle, file, chunk_size)
     end
   end
 

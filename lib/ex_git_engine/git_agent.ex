@@ -811,6 +811,21 @@ defmodule ExGitEngine.GitAgent do
   def pack_create(agent, oids, opts \\ []), do: exec(agent, {:pack, oids}, opts)
 
   @doc """
+  Like `pack_create/3`, but writes the PACK to the existing file at `path` instead of holding it
+  in memory.
+  """
+  @spec pack_file(agent, [Git.oid()], Path.t(), keyword) :: :ok | {:error, term}
+  def pack_file(agent, oids, path, opts \\ []), do: exec(agent, {:pack_file, oids, path}, opts)
+
+  @doc """
+  Like `pack_commits/3`, but writes the PACK to the existing file at `path` instead of holding it
+  in memory.
+  """
+  @spec pack_commits_file(agent, [Git.oid()], Path.t(), keyword) :: :ok | {:error, term}
+  def pack_commits_file(agent, commits, path, opts \\ []),
+    do: exec(agent, {:pack_commits_file, commits, path}, opts)
+
+  @doc """
   Returns the commits within `depth` of the given `wants` (the wants are depth 1),
   and the shallow boundary: those of them whose parents lie beyond `depth`.
   """
@@ -901,6 +916,8 @@ defmodule ExGitEngine.GitAgent do
   def handle_call(op, from, {_handle, config} = state)
       when elem(op, 0) in [
              :pack,
+             :pack_file,
+             :pack_commits_file,
              :blame,
              :graph_ahead_behind,
              :odb_writepack_commit
@@ -975,6 +992,13 @@ defmodule ExGitEngine.GitAgent do
   defp pop_exec_opts(opts), do: Enum.split_with(opts, fn {k, _v} -> k in @exec_opts end)
 
   defp call_off_agent({:odb_writepack_commit, _, _} = op, _path), do: call(nil, op)
+
+  defp call_off_agent(op, path) when elem(op, 0) in [:pack, :pack_file, :pack_commits_file] do
+    with {:ok, handle} <- Git.repository_open(path),
+         {:ok, config} <- Git.repository_get_config(handle),
+         :ok <- Git.config_add_file(config, ExGitEngine.Application.pack_config_path()),
+         do: call(handle, op)
+  end
 
   defp call_off_agent(op, path),
     do: with({:ok, handle} <- Git.repository_open(path), do: call(handle, op))
@@ -1428,6 +1452,12 @@ defmodule ExGitEngine.GitAgent do
          do: Git.revwalk_pack(walk)
   end
 
+  defp call(handle, {:pack_file, oids, path}) do
+    with {:ok, walk} <- Git.revwalk_new(handle),
+         :ok <- walk_insert(walk, oid_mask(oids)),
+         do: Git.revwalk_pack_file(walk, path)
+  end
+
   # git/shallow.c get_shallows_or_depth: breadth first, so each commit gets its
   # minimal depth; wants are depth 1, commits reaching `depth` are the boundary
   defp call(handle, {:shallow_commits, wants, depth}),
@@ -1437,6 +1467,12 @@ defmodule ExGitEngine.GitAgent do
     with {:ok, pack} <- Git.pack_new(handle),
          :ok <- pack_insert_commits(pack, commits),
          do: Git.pack_data(pack)
+  end
+
+  defp call(handle, {:pack_commits_file, commits, path}) do
+    with {:ok, pack} <- Git.pack_new(handle),
+         :ok <- pack_insert_commits(pack, commits),
+         do: Git.pack_write_file(pack, path)
   end
 
   defp call(handle, {:transaction, _name, cb}) do

@@ -18,5 +18,7 @@ ERL_NIF_TERM git_engine_pack_new(ErlNifEnv *env, int argc, const ERL_NIF_TERM ar
 ERL_NIF_TERM git_engine_pack_insert_commit(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 ERL_NIF_TERM git_engine_pack_insert_walk(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 ERL_NIF_TERM git_engine_pack_data(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
+ERL_NIF_TERM git_engine_pack_write_file(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
+ERL_NIF_TERM git_engine_pack_to_file(ErlNifEnv *env, git_packbuilder *pb, ERL_NIF_TERM path);
 
 #endif

@@ -2,5 +2,6 @@
 #define GIT_ENGINE_LIBRARY_H
 
 ERL_NIF_TERM git_engine_library_version(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
+ERL_NIF_TERM git_engine_library_set_memory_limits(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 
 #endif

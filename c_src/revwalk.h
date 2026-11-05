@@ -22,5 +22,6 @@ ERL_NIF_TERM git_engine_revwalk_sorting(ErlNifEnv *env, int argc, const ERL_NIF_
 ERL_NIF_TERM git_engine_revwalk_simplify_first_parent(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 ERL_NIF_TERM git_engine_revwalk_reset(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 ERL_NIF_TERM git_engine_revwalk_pack(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
+ERL_NIF_TERM git_engine_revwalk_pack_file(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 
 #endif

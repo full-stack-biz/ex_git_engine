@@ -2,6 +2,7 @@
 #include "pack.h"
 #include "repository.h"
 #include "revwalk.h"
+#include <stdio.h>
 #include <string.h>
 #include <git2.h>
 
@@ -112,4 +113,72 @@ git_engine_pack_data(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	git_buf_free(&buf);
 
 	return enif_make_tuple2(env, atoms.ok, enif_make_binary(env, &data));
+}
+
+typedef struct {
+	FILE *file;
+	int failed;
+} pack_file_sink;
+
+static int pack_file_write(void *buf, size_t size, void *payload)
+{
+	pack_file_sink *sink = (pack_file_sink *) payload;
+
+	if (fwrite(buf, 1, size, sink->file) == size)
+		return 0;
+
+	sink->failed = 1;
+	return -1;
+}
+
+/*
+ * Writes the pack to the existing file at `path` as libgit2 produces it, without holding it in
+ * memory. "r+" rather than "w": a file its owner removed (the client left) is not created again.
+ */
+ERL_NIF_TERM
+git_engine_pack_to_file(ErlNifEnv *env, git_packbuilder *pb, ERL_NIF_TERM path)
+{
+	ErlNifBinary path_bin;
+	pack_file_sink sink = {NULL, 0};
+	char *c_path;
+	int error;
+
+	if (!enif_inspect_binary(env, path, &path_bin))
+		return enif_make_badarg(env);
+
+	c_path = enif_alloc(path_bin.size + 1);
+	if (!c_path)
+		return git_engine_oom(env);
+
+	memcpy(c_path, path_bin.data, path_bin.size);
+	c_path[path_bin.size] = '\0';
+	sink.file = fopen(c_path, "r+b");
+	enif_free(c_path);
+
+	if (!sink.file)
+		return enif_make_tuple2(env, atoms.error, enif_make_atom(env, "pack_file_failed"));
+
+	error = git_packbuilder_foreach(pb, pack_file_write, &sink);
+
+	if (fclose(sink.file) != 0)
+		sink.failed = 1;
+
+	if (sink.failed)
+		return enif_make_tuple2(env, atoms.error, enif_make_atom(env, "pack_file_failed"));
+
+	if (error < 0)
+		return git_engine_error_struct(env, error);
+
+	return atoms.ok;
+}
+
+ERL_NIF_TERM
+git_engine_pack_write_file(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+	git_engine_pack *pack;
+
+	if (!enif_get_resource(env, argv[0], git_engine_pack_type, (void **)&pack))
+		return enif_make_badarg(env);
+
+	return git_engine_pack_to_file(env, pack->pack, argv[1]);
 }

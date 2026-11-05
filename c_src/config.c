@@ -36,6 +36,35 @@ git_engine_config_open(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 }
 
+/*
+ * Adds the file at `path` to `config` at application level, above the repository's own files.
+ * It changes only this in-memory config, which is shared with the repository handle it came from.
+ */
+ERL_NIF_TERM
+git_engine_config_add_file(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+	git_engine_config *cfg;
+	ErlNifBinary bin;
+	int error;
+
+	if (!enif_get_resource(env, argv[0], git_engine_config_type, (void **) &cfg))
+		return enif_make_badarg(env);
+
+	if (!enif_inspect_binary(env, argv[1], &bin))
+		return enif_make_badarg(env);
+
+	if (!git_engine_terminate_binary(&bin))
+		return git_engine_oom(env);
+
+	error = git_config_add_file_ondisk(cfg->config, (char *) bin.data, GIT_CONFIG_LEVEL_APP, NULL, 1);
+	enif_release_binary(&bin);
+
+	if (error < 0)
+		return git_engine_error_struct(env, error);
+
+	return atoms.ok;
+}
+
 static ERL_NIF_TERM extract(git_engine_config **cfg, ErlNifBinary *bin, ErlNifEnv *env, const ERL_NIF_TERM argv[])
 {
 	if (!enif_get_resource(env, argv[0], git_engine_config_type, (void **) cfg))
