@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-11-05
+
+### Breaking changes
+
+- The application now sets libgit2's process-wide limits at start: 64 MB of cached objects (`:cache_max_size`, libgit2's default is 256 MB), 128 MB of mapped pack data (`:mapped_limit`) and a 16 MB mapped pack window (`:mapped_window_size`), all in bytes. They apply to every libgit2 call in the VM, and repeated reads of large repositories may be slower. Set these `config :ex_git_engine` keys to change them.
+- `UploadPack` with `send` and side-band now needs a writable temp directory: the pack is written to a `0600` file in `:pack_tmp_dir` (default `System.tmp_dir!/0`) and removed after the send, so each clone being sent uses disk for its pack. The start of the application also writes a gitconfig file there, and fails if it cannot.
+- Pack builds through `GitAgent.pack_create/3`, `pack_file/4` and `pack_commits_file/4` run with `pack.windowMemory` and `pack.deltaCacheSize` of 64 MB (`:pack_window_memory`, `:pack_delta_cache_size`), which override the repository's git config. libgit2 also reads `pack.deltaCacheSize` as the size above which an object gets no delta compression, so packs of repositories with objects over 64 MB can be larger.
+
+### Added
+
+- `GitAgent.pack_file/4` and `GitAgent.pack_commits_file/4` write a PACK to an existing file instead of returning it, and `Git.revwalk_pack_file/2` and `Git.pack_write_file/2` are the NIFs under them. The file must exist: a file removed before the build returns `{:error, :pack_file_failed}` and is not created again.
+- `Git.config_add_file/2` adds a config file above a repository's own files, in memory, for one handle. `Git.library_set_memory_limits/3` sets the libgit2 limits above.
+
+### Changed
+
+- `UploadPack` with `send` and side-band streams the pack from a temp file in side-band chunks. Before, the whole pack was held in memory, twice for a moment while it was copied into a binary, until it was sent, and a 114 MB pack peaked at about 205 MB of extra process memory (64 MB now, measured on macOS). A slow client holds no `JobLimiter` slot or dirty scheduler while it reads.
+
+### Fixed
+
+- With `send`, output buffered by an earlier step goes out before a later step writes directly. Before, one HTTP request that answered a shallow list and a pack sent NAK first, and git failed with `git fetch-pack: expected shallow list`.
+
 ## [0.14.0] - 2026-11-04
 
 ### Breaking changes
@@ -231,6 +252,7 @@ First release as a standalone Hex package, extracted and modernised from [git.li
 - Tag peeling and `GitAgent` tag-related functions.
 - `references_target` resolution for symbolic refs.
 
+[0.15.0]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.13.1...v0.14.0
 [0.13.1]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.12.2...v0.13.0
