@@ -48,7 +48,7 @@ defmodule ExGitEngine.Mixfile do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => "https://github.com/full-stack-biz/ex_git_engine"},
-      files: ~w(lib c_src Makefile mix.exs LICENSE readme.md)
+      files: ~w(lib c_src Makefile mix.exs LICENSE readme.md usage-rules.md)
     ]
   end
 
