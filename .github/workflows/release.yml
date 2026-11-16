@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: full-stack-arc-runner-set
+    # Must match the environment configured in the Hex workload identity.
+    environment: release
+
+    env:
+      ImageOS: ubuntu22
+      ELIXIR_VERSION: "1.20.4"
+      OTP_VERSION: "29.1.1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1.19
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+
+      # hex.publish builds docs, which compiles the NIF.
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libgit2-dev build-essential
+
+      - run: mix deps.get
+      - run: mix hex.publish --yes
