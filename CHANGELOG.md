@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.1] - 2026-11-16
+
+### Added
+
+- The package ships `usage-rules.md`, usage rules for AI coding agents (`mix usage_rules.sync`).
+
 ## [0.15.0] - 2026-11-05
 
 ### Breaking changes
@@ -252,6 +258,7 @@ First release as a standalone Hex package, extracted and modernised from [git.li
 - Tag peeling and `GitAgent` tag-related functions.
 - `references_target` resolution for symbolic refs.
 
+[0.15.1]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.13.1...v0.14.0
 [0.13.1]: https://github.com/full-stack-biz/ex_git_engine/compare/v0.13.0...v0.13.1
